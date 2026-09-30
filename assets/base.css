@@ -78,3 +78,39 @@ button {
 .error {
   color: var(--error);
 }
+
+h2 {
+  font-size: 15px;
+  margin: 16px 0 8px;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--fg);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.card {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.card p {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.text-preview {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
