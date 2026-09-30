@@ -78,7 +78,7 @@ If these postings are closed, any live NVIDIA posting uses the same application 
 - **WXT** — framework for building Chrome extensions (Manifest V3, uses Vite)
 - **React** — for the side panel UI
 - **Chrome Side Panel** — main UI (stays open while pages change)
-- **OpenAI or Anthropic API** — behind a small adapter so the provider can be swapped; use structured JSON output
+- **Google Gemini API** — behind a small adapter so the provider can be swapped; use structured JSON output
 - **pdfjs-dist** — read PDF resumes
 - **mammoth** — read DOCX resumes
 - **zod** — validate AI output and messages
@@ -212,8 +212,13 @@ If time gets short: protect the full end-to-end flow + review/confirm + EEO rule
 
 - [x] Assignment understood, plan made
 - [x] Name chosen: **FormPilot**
-- [ ] Repo set up with WXT + React (`npx wxt@latest init formpilot`), extra packages installed, folders created, pushed to GitHub
-- [ ] Recon of NVIDIA form done (`docs/recon/`)
-- [ ] **Next up: M1 — resume upload and parsing**
+- [x] Repo set up with WXT + React, extra packages installed, pushed to GitHub
+- [ ] Recon of NVIDIA form done (`docs/recon/`) — **deferred until after M1**
+- [ ] **M1 — resume upload and parsing (in progress)**
+  - [x] Step 1: side panel, options page (Gemini API key), Vitest setup
+  - [ ] Step 2: data shapes (zod) + storage helpers
+  - [ ] Step 3: read PDF/DOCX text, keep original file in IndexedDB
+  - [ ] Step 4: Gemini adapter in background → structured JSON
+  - [ ] Step 5: profile + Answers editing screens
 
 (Update this list as work progresses.)
