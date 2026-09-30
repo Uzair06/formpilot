@@ -14,10 +14,12 @@ interface Props {
   onResumeReady: (file: ResumeFile) => void;
   onRemoved: () => void;
   busy: boolean; // true while the AI is working, so the user can't start a second run
+  hasProfile: boolean; // if true, reading again replaces the user's edits, so ask first
 }
 
-export default function ResumeUpload({ onResumeReady, onRemoved, busy }: Props) {
+export default function ResumeUpload({ onResumeReady, onRemoved, busy, hasProfile }: Props) {
   const [saved, setSaved] = useState<ResumeFile | null>(null);
+  const [confirmingReread, setConfirmingReread] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
 
   // Show the resume saved last time, if there is one.
@@ -73,7 +75,10 @@ export default function ResumeUpload({ onResumeReady, onRemoved, busy }: Props) 
         disabled={status.kind === 'reading' || busy}
         onChange={onFileChosen}
       />
-      <p className="muted">PDF or Word (.docx), up to 5 MB. Stays on this computer.</p>
+      <p className="muted">
+        PDF or Word (.docx), up to 5 MB. Stays on this computer.
+        {hasProfile && ' A new resume replaces your current profile.'}
+      </p>
 
       {status.kind === 'reading' && <p>Reading your resume…</p>}
       {status.kind === 'error' && <p className="error">{status.message}</p>}
@@ -90,14 +95,34 @@ export default function ResumeUpload({ onResumeReady, onRemoved, busy }: Props) 
             <summary>Show text we read</summary>
             <pre className="text-preview">{saved.text}</pre>
           </details>
-          <div className="row">
-            <button type="button" disabled={busy} onClick={() => onResumeReady(saved)}>
-              Read again with AI
-            </button>
-            <button type="button" className="secondary" disabled={busy} onClick={onRemove}>
-              Remove
-            </button>
-          </div>
+          {confirmingReread ? (
+            <div className="confirm">
+              <p>This replaces your profile, including any edits you made. Continue?</p>
+              <div className="row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmingReread(false);
+                    onResumeReady(saved);
+                  }}
+                >
+                  Yes, read again
+                </button>
+                <button type="button" className="secondary" onClick={() => setConfirmingReread(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="row">
+              <button type="button" disabled={busy} onClick={() => (hasProfile ? setConfirmingReread(true) : onResumeReady(saved))}>
+                Read again with AI
+              </button>
+              <button type="button" className="secondary" disabled={busy} onClick={onRemove}>
+                Remove
+              </button>
+            </div>
+          )}
         </div>
       )}
     </section>

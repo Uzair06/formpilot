@@ -220,5 +220,7 @@ If time gets short: protect the full end-to-end flow + review/confirm + EEO rule
   - [x] Step 3: read PDF/DOCX text, keep original file in IndexedDB
   - [x] Step 4: Gemini adapter in background → structured JSON (live check: `GEMINI_API_KEY=… npm run test:live`; model picked in Settings, default `gemini-flash-latest`)
   - [ ] Step 5: profile + Answers editing screens
+    - [x] 5a: resume edit form with autosave
+    - [ ] 5b: Answers form + tabs
 
 (Update this list as work progresses.)

@@ -3,11 +3,12 @@ import { sendToBackground } from '@/src/messaging/messages';
 import type { ResumeProfile } from '@/src/profile/resume';
 import type { ResumeFile } from '@/src/profile/resume-file';
 import { clearResumeProfile, loadResumeProfile, saveResumeProfile } from '@/src/profile/storage';
-import ProfileSummary, { type ParseState } from './ProfileSummary';
+import ProfileSection, { type ParseState } from './ProfileSection';
 import ResumeUpload from './ResumeUpload';
 
 export default function App() {
   const [profile, setProfile] = useState<ResumeProfile | null>(null);
+  const [profileVersion, setProfileVersion] = useState(0);
   const [parse, setParse] = useState<ParseState>({ kind: 'idle' });
 
   // Show the profile saved last time, if there is one.
@@ -25,6 +26,7 @@ export default function App() {
     }
     await saveResumeProfile(result.data);
     setProfile(result.data);
+    setProfileVersion((v) => v + 1);
     setParse({ kind: 'idle' });
   }
 
@@ -42,8 +44,13 @@ export default function App() {
           Settings
         </button>
       </header>
-      <ResumeUpload onResumeReady={buildProfile} onRemoved={removeProfile} busy={parse.kind === 'working'} />
-      <ProfileSummary profile={profile} parse={parse} />
+      <ResumeUpload
+        onResumeReady={buildProfile}
+        onRemoved={removeProfile}
+        busy={parse.kind === 'working'}
+        hasProfile={profile !== null}
+      />
+      <ProfileSection profile={profile} profileVersion={profileVersion} parse={parse} />
     </main>
   );
 }

@@ -24,3 +24,7 @@ One line per non-obvious decision.
 - 2026-09-30 — Gemini 500/503/504 are retried twice with backoff (1 s, then 3 s), as Google's error docs advise. This is an API backoff, not a page-loading wait, so it doesn't conflict with Hard Rule 7.
 - 2026-09-30 — Errors carry Google's own short explanation (`detail`, e.g. "HTTP 503 — UNAVAILABLE: …"), shown in small print for troubleshooting. It never contains resume data.
 - 2026-09-30 — Nullable fields are sent as `type: [X, "null"]` (Gemini's documented form) instead of zod's `anyOf`.
+- 2026-09-30 — Edit forms autosave (developer's choice) ~0.6 s after typing stops, and only when the whole form is valid; otherwise the status line says what to fix. A waiting save is written at once on `pagehide`/`visibilitychange` so closing the panel doesn't lose it.
+- 2026-09-30 — The resume form edits a "draft" where years are text (`src/profile/resume-draft.ts`), so half-typed years ("20") never reach storage. Jobs: missing month counts as Jan (start) / Dec (end) when checking end ≥ start.
+- 2026-09-30 — "Read again with AI" asks before replacing an edited profile (inline confirm, not `window.confirm`).
+- 2026-09-30 — Component tests use React's own `act` + `react-dom/client` in happy-dom (`tests/unit/sidepanel/render.ts`) instead of adding React Testing Library, to avoid another dependency (see the npm lockfile note).
