@@ -9,7 +9,14 @@ const MIME_BY_KIND = {
 
 type Status = { kind: 'loading' } | { kind: 'ready' } | { kind: 'reading' } | { kind: 'error'; message: string };
 
-export default function ResumeUpload() {
+interface Props {
+  /** Called with a newly saved file, or when the user asks to read the saved one again. */
+  onResumeReady: (file: ResumeFile) => void;
+  onRemoved: () => void;
+  busy: boolean; // true while the AI is working, so the user can't start a second run
+}
+
+export default function ResumeUpload({ onResumeReady, onRemoved, busy }: Props) {
   const [saved, setSaved] = useState<ResumeFile | null>(null);
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
 
@@ -40,6 +47,7 @@ export default function ResumeUpload() {
       await saveResumeFile(record);
       setSaved(record);
       setStatus({ kind: 'ready' });
+      onResumeReady(record);
     } catch (error) {
       const message = error instanceof ResumeReadError ? error.message : 'Something went wrong while saving. Please try again.';
       setStatus({ kind: 'error', message });
@@ -49,6 +57,7 @@ export default function ResumeUpload() {
   async function onRemove() {
     await clearResumeFile();
     setSaved(null);
+    onRemoved();
   }
 
   if (status.kind === 'loading') return <p className="muted">Loading…</p>;
@@ -61,7 +70,7 @@ export default function ResumeUpload() {
         id="resume-file"
         type="file"
         accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        disabled={status.kind === 'reading'}
+        disabled={status.kind === 'reading' || busy}
         onChange={onFileChosen}
       />
       <p className="muted">PDF or Word (.docx), up to 5 MB. Stays on this computer.</p>
@@ -81,9 +90,14 @@ export default function ResumeUpload() {
             <summary>Show text we read</summary>
             <pre className="text-preview">{saved.text}</pre>
           </details>
-          <button type="button" className="secondary" onClick={onRemove}>
-            Remove
-          </button>
+          <div className="row">
+            <button type="button" disabled={busy} onClick={() => onResumeReady(saved)}>
+              Read again with AI
+            </button>
+            <button type="button" className="secondary" disabled={busy} onClick={onRemove}>
+              Remove
+            </button>
+          </div>
         </div>
       )}
     </section>

@@ -48,7 +48,8 @@ label {
 }
 
 input[type='password'],
-input[type='text'] {
+input[type='text'],
+select {
   box-sizing: border-box;
   width: 100%;
   padding: 6px 8px;
@@ -112,5 +113,20 @@ button.secondary {
   max-height: 240px;
   overflow: auto;
   white-space: pre-wrap;
+  font-size: 12px;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.warnings {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.small {
   font-size: 12px;
 }

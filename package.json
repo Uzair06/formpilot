@@ -14,7 +14,8 @@
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:live": "FORMPILOT_LIVE=1 vitest run"
   },
   "dependencies": {
     "fuse.js": "^7.5.0",

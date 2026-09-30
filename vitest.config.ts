@@ -12,6 +12,8 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
-    include: ['tests/unit/**/*.test.ts'],
+    // `npm test` runs the fast offline unit tests. `npm run test:live` runs the tests that
+    // call the real Gemini API (they need GEMINI_API_KEY and use your quota).
+    include: process.env.FORMPILOT_LIVE ? ['tests/live/**/*.test.ts'] : ['tests/unit/**/*.test.ts'],
   },
 });
