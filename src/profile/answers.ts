@@ -55,3 +55,59 @@ export type AnswersProfile = z.infer<typeof AnswersProfileSchema>;
 export function defaultAnswersProfile(): AnswersProfile {
   return AnswersProfileSchema.parse({});
 }
+
+// --- Question texts and option labels (used by the Answers form, and later by the Mapper) ---
+
+export type YesNoKey = 'workAuthorized' | 'needsSponsorship' | 'willingToRelocate' | 'over18' | 'previouslyWorkedAtCompany';
+
+export const YES_NO_QUESTIONS: ReadonlyArray<{ key: YesNoKey; question: string; hint?: string }> = [
+  { key: 'workAuthorized', question: 'Are you legally allowed to work in the country of the job?' },
+  { key: 'needsSponsorship', question: 'Will you now or in the future need visa sponsorship to work there?' },
+  { key: 'willingToRelocate', question: 'Are you willing to relocate?' },
+  { key: 'over18', question: 'Are you at least 18 years old?' },
+  {
+    key: 'previouslyWorkedAtCompany',
+    question: 'Have you worked for NVIDIA before (as an employee or contractor)?',
+    hint: 'Used for the NVIDIA form. Change it if you apply to another company.',
+  },
+];
+
+export const GENDER_LABELS: Record<z.infer<typeof GenderSchema>, string> = {
+  male: 'Male',
+  female: 'Female',
+  non_binary: 'Non-binary',
+  decline: 'Decline to self-identify',
+};
+
+export const ETHNICITY_LABELS: Record<z.infer<typeof EthnicitySchema>, string> = {
+  hispanic_latino: 'Hispanic or Latino',
+  white: 'White',
+  black_african_american: 'Black or African American',
+  asian: 'Asian',
+  american_indian_alaska_native: 'American Indian or Alaska Native',
+  native_hawaiian_pacific_islander: 'Native Hawaiian or Other Pacific Islander',
+  two_or_more: 'Two or more races',
+  decline: 'Decline to self-identify',
+};
+
+export const VETERAN_LABELS: Record<z.infer<typeof VeteranSchema>, string> = {
+  not_veteran: 'I am not a veteran',
+  protected_veteran: 'I am a protected veteran',
+  veteran_not_protected: 'I am a veteran, but not a protected veteran',
+  decline: 'Decline to self-identify',
+};
+
+export const DISABILITY_LABELS: Record<z.infer<typeof DisabilitySchema>, string> = {
+  yes: 'Yes, I have a disability (or had one in the past)',
+  no: 'No, I do not have a disability',
+  decline: 'Decline to self-identify',
+};
+
+/**
+ * How many questions Workday forms usually require that the user hasn't answered yet.
+ * Optional ones (notice period, salary) and EEO (always has "decline") are not counted.
+ */
+export function countUnanswered(answers: AnswersProfile): number {
+  const yesNoMissing = YES_NO_QUESTIONS.filter(({ key }) => answers[key] === null).length;
+  return yesNoMissing + (answers.howDidYouHear.trim() ? 0 : 1);
+}

@@ -28,3 +28,7 @@ One line per non-obvious decision.
 - 2026-09-30 — The resume form edits a "draft" where years are text (`src/profile/resume-draft.ts`), so half-typed years ("20") never reach storage. Jobs: missing month counts as Jan (start) / Dec (end) when checking end ≥ start.
 - 2026-09-30 — "Read again with AI" asks before replacing an edited profile (inline confirm, not `window.confirm`).
 - 2026-09-30 — Component tests use React's own `act` + `react-dom/client` in happy-dom (`tests/unit/sidepanel/render.ts`) instead of adding React Testing Library, to avoid another dependency (see the npm lockfile note).
+- 2026-10-01 — Side panel tabs (Resume / Answers) stay mounted and are only hidden, so switching tabs never throws away typing in progress. Editors report every save up to `App` (`onSaved`), so a rebuilt editor always starts from the latest saved data (fixes edits being undone after a failed "Read again with AI").
+- 2026-10-01 — Answers yes/no questions use Yes / No / Not answered radios. The tab badge counts the 5 yes/no questions + "How did you hear" (`countUnanswered`); notice period, salary and EEO are not counted.
+- 2026-10-01 — Question texts and EEO option labels live in `src/profile/answers.ts` so the Mapper (M4/M7) can reuse them when matching Workday's wording.
+- 2026-10-01 — "Worked here before" is worded for NVIDIA (the target form); it is one global answer, not per company.

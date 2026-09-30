@@ -139,3 +139,22 @@ export function MonthYearField({ label, value, onChange, error }: { label: strin
     </FieldShell>
   );
 }
+
+/** A small group of round buttons where exactly one is picked (e.g. Yes / No / Not answered). */
+export function RadioGroupField<T extends string>({ label, value, options, onChange, hint }: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string }>; onChange: (value: T) => void; hint?: string }) {
+  const name = useId(); // one shared name makes the browser treat the buttons as one group
+  return (
+    <fieldset className="field radio-group">
+      <legend>{label}</legend>
+      <div className="radio-row">
+        {options.map((option) => (
+          <label key={option.value} className="radio">
+            <input type="radio" name={name} value={option.value} checked={value === option.value} onChange={() => onChange(option.value)} />
+            {option.label}
+          </label>
+        ))}
+      </div>
+      {hint && <p className="muted small">{hint}</p>}
+    </fieldset>
+  );
+}

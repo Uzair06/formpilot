@@ -9,9 +9,10 @@ interface Props {
   /** Changes whenever the AI produces a new profile, so the editor starts fresh from it. */
   profileVersion: number;
   parse: ParseState;
+  onSaved: (profile: ResumeProfile) => void;
 }
 
-export default function ProfileSection({ profile, profileVersion, parse }: Props) {
+export default function ProfileSection({ profile, profileVersion, parse, onSaved }: Props) {
   return (
     <section>
       <h2>Profile</h2>
@@ -31,7 +32,7 @@ export default function ProfileSection({ profile, profileVersion, parse }: Props
       {profile && parse.kind !== 'working' && (
         <>
           <p className="muted">Check what was read and fix anything that's wrong. Changes save automatically.</p>
-          <ResumeEditor key={profileVersion} initial={profile} />
+          <ResumeEditor key={profileVersion} initial={profile} onSaved={onSaved} />
         </>
       )}
     </section>

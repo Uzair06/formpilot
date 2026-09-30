@@ -18,14 +18,23 @@ const PHONE_TYPES = [
   { value: 'work', label: 'Work' },
 ] as const;
 
+interface Props {
+  initial: ResumeProfile;
+  /** Called after each successful save, so the app always knows the latest profile. */
+  onSaved?: (profile: ResumeProfile) => void;
+}
+
 /** Edit form for the resume profile. Changes are checked and saved automatically. */
-export default function ResumeEditor({ initial }: { initial: ResumeProfile }) {
+export default function ResumeEditor({ initial, onSaved }: Props) {
   const [draft, setDraft] = useState<ResumeDraft>(() => toDraft(initial));
 
   // Check the draft once per change. A valid result is what autosave writes.
   const result = useMemo(() => fromDraft(draft), [draft]);
   const errors = result.ok ? {} : result.errors;
-  const status = useAutosave(result.ok ? result.profile : null, saveResumeProfile);
+  const status = useAutosave(result.ok ? result.profile : null, async (profile) => {
+    await saveResumeProfile(profile);
+    onSaved?.(profile);
+  });
 
   // Change the draft through a copy, so React sees a new object and re-renders.
   const update = (change: (next: ResumeDraft) => void) =>

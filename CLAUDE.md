@@ -213,14 +213,14 @@ If time gets short: protect the full end-to-end flow + review/confirm + EEO rule
 - [x] Assignment understood, plan made
 - [x] Name chosen: **FormPilot**
 - [x] Repo set up with WXT + React, extra packages installed, pushed to GitHub
-- [ ] Recon of NVIDIA form done (`docs/recon/`) — **deferred until after M1**
-- [ ] **M1 — resume upload and parsing (in progress)**
+- [ ] **Next up: recon of the NVIDIA form (`docs/recon/`)**, then M2 (Scanner)
+- [x] **M1 — resume upload and parsing**
   - [x] Step 1: side panel, options page (Gemini API key), Vitest setup
   - [x] Step 2: data shapes (zod) + storage helpers
   - [x] Step 3: read PDF/DOCX text, keep original file in IndexedDB
   - [x] Step 4: Gemini adapter in background → structured JSON (live check: `GEMINI_API_KEY=… npm run test:live`; model picked in Settings, default `gemini-flash-latest`)
-  - [ ] Step 5: profile + Answers editing screens
+  - [x] Step 5: profile + Answers editing screens
     - [x] 5a: resume edit form with autosave
-    - [ ] 5b: Answers form + tabs
+    - [x] 5b: Answers form + Resume/Answers tabs
 
 (Update this list as work progresses.)

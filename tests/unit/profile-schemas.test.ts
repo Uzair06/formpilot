@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AnswersProfileSchema, defaultAnswersProfile } from '@/src/profile/answers';
+import { AnswersProfileSchema, countUnanswered, defaultAnswersProfile } from '@/src/profile/answers';
 import { ResumeProfileSchema, emptyResumeProfile } from '@/src/profile/resume';
 
 describe('ResumeProfileSchema', () => {
@@ -63,5 +63,24 @@ describe('AnswersProfileSchema', () => {
   it('rejects values outside the allowed lists', () => {
     expect(AnswersProfileSchema.safeParse({ eeo: { gender: 'unknown' } }).success).toBe(false);
     expect(AnswersProfileSchema.safeParse({ workAuthorized: 'maybe' }).success).toBe(false);
+  });
+});
+
+describe('countUnanswered', () => {
+  it('counts the five yes/no questions and "how did you hear"', () => {
+    expect(countUnanswered(defaultAnswersProfile())).toBe(6);
+  });
+
+  it('counts "no" as answered and ignores optional questions and EEO', () => {
+    const answers = defaultAnswersProfile();
+    answers.workAuthorized = 'yes';
+    answers.needsSponsorship = 'no';
+    answers.willingToRelocate = 'no';
+    answers.over18 = 'yes';
+    answers.previouslyWorkedAtCompany = 'no';
+    answers.howDidYouHear = '  ';
+    expect(countUnanswered(answers)).toBe(1); // blank spaces don't count as an answer
+    answers.howDidYouHear = 'LinkedIn';
+    expect(countUnanswered(answers)).toBe(0);
   });
 });
