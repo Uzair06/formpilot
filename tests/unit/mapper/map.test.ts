@@ -76,6 +76,13 @@ describe('mapFields', () => {
     expect(ai).not.toHaveBeenCalled();
   });
 
+  it('writes LinkedIn in the full form Workday accepts', async () => {
+    const profile = structuredClone(PROFILE);
+    profile.links.linkedin = 'linkedin.com/in/alex-rivera-example/';
+    const [decision] = await mapFields([field('Please provide a link to your LinkedIn profile:')], profile, answers(), noAi);
+    expect(decision!.value).toBe('https://www.linkedin.com/in/alex-rivera-example');
+  });
+
   it('keeps values that are already on the page', async () => {
     const [decision] = await mapFields([field('Given Name', { currentValue: 'Alexander' })], PROFILE, answers(), noAi);
     expect(decision).toMatchObject({ value: 'Alexander', source: 'prefilled', status: 'skip' });

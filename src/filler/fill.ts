@@ -161,6 +161,17 @@ async function readAllOptions(list: HTMLElement): Promise<string[]> {
   return [...seen];
 }
 
+/** Opens a search-style list without typing (e.g. Degree), reads all its choices, and closes it. */
+export async function readPromptOptions(field: FieldDescriptor): Promise<string[]> {
+  const input = elementFor(field) as HTMLInputElement | null;
+  if (!input || field.type !== 'prompt') return field.options;
+  const list = await openDropdown(input);
+  const options = list ? await readAllOptions(list) : [];
+  pressKey(list ?? input, 'Escape');
+  await waitFor(() => !openList(input), { what: 'the list to close', timeoutMs: 1_500 }).catch(() => null);
+  return options;
+}
+
 /** Opens a Workday drop-down, reads its choices, and closes it again. Used by the Mapper. */
 export async function readDropdownOptions(field: FieldDescriptor): Promise<string[]> {
   const element = elementFor(field);
@@ -214,12 +225,20 @@ function selectedCount(input: Element): number | null {
   return match ? Number(match[1]) : null;
 }
 
-/** Puts search text into the box the way typing does, without leaving the box. */
+/**
+ * Puts search text into the box the way typing does, without leaving the box.
+ * Never used to empty the box: in Workday, deleting in an empty search box removes the last picked item.
+ */
 function typeSearch(input: HTMLInputElement, text: string): void {
   focus(input);
-  input.select?.();
+  if (input.value) input.select?.(); // replace leftover search text only
   const inserted = document.execCommand?.('insertText', false, text);
   if (!inserted || input.value !== text) setNativeValue(input, text);
+}
+
+/** Clears leftover search text (not picked items) without a delete keystroke. */
+function clearSearchText(input: HTMLInputElement): void {
+  if (input.value) setNativeValue(input, '');
 }
 
 async function fillPrompt(input: HTMLInputElement, value: string): Promise<FillOutcome> {
@@ -237,16 +256,21 @@ async function fillPrompt(input: HTMLInputElement, value: string): Promise<FillO
   // then, if that finds nothing, the full list (some questions are "scroll and pick").
   const searches: Array<() => Promise<HTMLElement | null>> = [
     async () => {
-      realClick(input);
+      focus(input);
       typeSearch(input, value);
-      return (
-        (await waitFor(() => openList(input), { what: 'suggestions', timeoutMs: 2_500 }).catch(() => null)) ??
-        (pressKey(input, 'Enter'), await waitFor(() => openList(input), { what: 'search results', timeoutMs: 4_000 }).catch(() => null))
-      );
+      // Suggestions may appear while typing; let the list settle before reading it (an earlier list may still be open).
+      await waitForQuiet({ quietMs: 500, timeoutMs: 3_000 });
+      const listed = openList(input);
+      if (listed && optionElements(listed).some((o) => matchOption(value, [optionText(o)]))) return listed;
+      // Workday's search runs on Enter.
+      pressKey(input, 'Enter');
+      await waitFor(() => openList(input), { what: 'search results', timeoutMs: 5_000 }).catch(() => null);
+      await waitForQuiet({ quietMs: 400, timeoutMs: 3_000 });
+      return openList(input);
     },
     async () => {
       pressKey(input, 'Escape');
-      typeSearch(input, '');
+      clearSearchText(input);
       return openDropdown(input);
     },
   ];
@@ -271,16 +295,16 @@ async function fillPrompt(input: HTMLInputElement, value: string): Promise<FillO
         timeoutMs: 3_000,
       }).catch(() => null);
       if (picked(match)) {
-        pressKey(input, 'Escape'); // close the list so the next search starts clean
-        await waitForQuiet({ quietMs: 200, timeoutMs: 2_000 });
+        // Leave the box as it is: the next item (e.g. the next skill) is simply typed in.
+        await waitForQuiet({ quietMs: 300, timeoutMs: 2_000 });
         return { ok: true, value: match };
       }
       list = done === 'next-level' ? openList(input) : null;
     }
   }
   pressKey(input, 'Escape');
-  typeSearch(input, '');
-  return fail(`Could not find "${value}" in the list.`, seen.slice(0, 20));
+  clearSearchText(input);
+  return fail(`Could not find "${value}" in the list.`, seen.slice(0, 60));
 }
 
 // --- radio buttons and checkboxes ---
@@ -317,14 +341,33 @@ function fillDate(group: HTMLElement, value: string): FillOutcome {
     const part = (input.getAttribute('data-automation-id') ?? input.getAttribute('aria-label') ?? '').match(/Month|Day|Year/i)?.[0];
     const partValue = part ? wanted[part[0]!.toUpperCase() + part.slice(1).toLowerCase()] : undefined;
     if (!partValue) continue;
+    realClick(input);
     focus(input);
-    setNativeValue(input, partValue);
-    blur(input);
-    if (Number(input.value) !== Number(partValue)) typeLikeKeyboard(input, partValue);
+    input.select?.();
+    if (!document.execCommand?.('insertText', false, partValue) || Number(input.value) !== Number(partValue)) setNativeValue(input, partValue);
   }
+  leaveField(group);
   const shown = inputs.map((input) => input.value).filter(Boolean).join('/');
   const digits = (text: string) => text.replace(/\D/g, '').replace(/^0+/, '');
   return digits(shown) === digits(value) ? { ok: true, value: shown } : fail(`The date shows "${shown}" instead.`);
+}
+
+/**
+ * Moves focus out of a widget the way clicking elsewhere does. Workday saves some widgets
+ * (dates especially) only when focus leaves them; until then it treats them as empty.
+ */
+function leaveField(widget: HTMLElement): void {
+  const active = document.activeElement as HTMLElement | null;
+  if (active && widget.contains(active)) {
+    active.dispatchEvent(new FocusEvent('blur', { relatedTarget: document.body }));
+    active.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: document.body }));
+    active.blur();
+  }
+  // A click on an empty part of the page, like a person clicking away.
+  const init = { bubbles: true, cancelable: true, view: window };
+  document.body.dispatchEvent(new MouseEvent('mousedown', init));
+  document.body.dispatchEvent(new MouseEvent('mouseup', init));
+  document.body.dispatchEvent(new MouseEvent('click', init));
 }
 
 // --- file upload ---

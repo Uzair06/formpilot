@@ -89,7 +89,11 @@ export function ruleFor(field: FieldDescriptor, profile: ResumeProfile, answers:
     const school = profile.education[repeatIndex(field.section)];
     if (!school) return { value: null, source: 'rule', reason: 'No matching school in your profile', status: 'skip' };
     if (has(label, /school|university|college|institution/)) return fill(school.school, 'School');
-    if (has(label, /degree/)) return null; // Workday degree lists vary ("Master's Degree" vs "M.S."): let the AI pick the option
+    if (has(label, /degree|level of education|qualification/)) {
+      // Resumes write "B.Tech", "M.S.", "MBA"…; forms list "Bachelor's Degree", "Master's Degree"….
+      const category = degreeCategory(`${school.degree} ${school.fieldOfStudy}`);
+      return category ? fill(category, `Degree (${school.degree})`) : null; // unknown wording: the AI picks from the options
+    }
     if (has(label, /field of study|major|discipline/)) return fill(school.fieldOfStudy, 'Field of study');
     if (has(label, /gpa|grade/)) return fill(school.gpa, 'GPA');
     if (has(label, /^from|start/)) return fill(school.startYear ? String(school.startYear) : null, 'Start year');
@@ -125,7 +129,7 @@ export function ruleFor(field: FieldDescriptor, profile: ResumeProfile, answers:
 
   // --- links ---
   const l = profile.links;
-  if (has(label, /linkedin/)) return fill(l.linkedin, 'LinkedIn');
+  if (has(label, /linkedin/)) return fill(linkedinUrl(l.linkedin), 'LinkedIn');
   if (has(label, /github/)) return fill(l.github, 'GitHub');
   if (has(label, /website|portfolio|personal (site|url)/)) return fill(l.portfolio || l.other[0], 'Website');
 
@@ -133,6 +137,23 @@ export function ruleFor(field: FieldDescriptor, profile: ResumeProfile, answers:
   if (field.type === 'prompt' && has(label, /skill/)) return fill(profile.skills.slice(0, 15), 'Skills from your resume');
 
   return null;
+}
+
+/** The standard degree level for what a resume writes ("B.Tech" → "Bachelor's Degree"). */
+export function degreeCategory(degree: string): string | null {
+  const d = normalize(degree);
+  if (/\b(ph ?d|doctor|doctorate|d phil|ed d)\b/.test(d)) return 'Doctorate';
+  if (/\b(m ?s|m ?sc|m ?tech|m ?e|m ?eng|m ?a|mba|m ?com|mca|m ?phil|master|masters|postgraduate|pg)\b/.test(d)) return "Master's Degree";
+  if (/\b(b ?s|b ?sc|b ?tech|b ?e|b ?eng|b ?a|bba|b ?com|bca|b ?arch|bachelor|bachelors|undergraduate|ug)\b/.test(d)) return "Bachelor's Degree";
+  if (/\bassociate/.test(d)) return "Associate's Degree";
+  if (/\b(high school|secondary|ged|12th|hsc|ssc)\b/.test(d)) return 'High School Diploma';
+  return null;
+}
+
+/** LinkedIn profile URL in the full form Workday's check accepts: https://www.linkedin.com/in/<name> */
+export function linkedinUrl(url: string): string {
+  const handle = url.match(/linkedin\.com\/in\/([^/?#\s]+)/i)?.[1];
+  return handle ? `https://www.linkedin.com/in/${handle}` : url;
 }
 
 /** Links for the Websites section (LinkedIn has its own question on Workday forms). */

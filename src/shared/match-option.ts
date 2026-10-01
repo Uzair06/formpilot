@@ -22,7 +22,12 @@ export function matchOption(wanted: string, options: string[]): string | null {
   // "United States" should find "United States of America"; "Yes" should find "Yes, I am".
   const startsWith = options.filter((option) => normalize(option).startsWith(target));
   if (startsWith.length === 1) return startsWith[0]!;
-  if (startsWith.length > 1) return null; // ambiguous: never guess between several options
+  if (startsWith.length > 1) {
+    // "Bachelor's" among "Bachelor's Degree" and "Bachelor's Degree (Honours)": take the plain one
+    // only when it is just the wanted words plus a generic word like "degree". Otherwise never guess.
+    const plain = startsWith.filter((option) => /^(degree|diploma|program(me)?|level)?$/.test(normalize(option).slice(target.length).trim()));
+    return plain.length === 1 ? plain[0]! : null;
+  }
 
   const contains = options.filter((option) => normalize(option).includes(target));
   if (contains.length === 1) return contains[0]!;

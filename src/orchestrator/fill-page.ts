@@ -1,4 +1,4 @@
-import { elementFor, fillField, readDropdownOptions, type FillOutcome } from '@/src/filler/fill';
+import { elementFor, fillField, readDropdownOptions, readPromptOptions, type FillOutcome } from '@/src/filler/fill';
 import { realClick } from '@/src/filler/events';
 import { mapFields } from '@/src/mapper/map';
 import { sendToBackground } from '@/src/messaging/messages';
@@ -43,9 +43,11 @@ export async function fillCurrentPage(): Promise<PageReport> {
 
     // Workday drop-downs only show their choices when opened: read them so answers can be checked.
     for (const field of fields) {
-      if (field.type === 'select' && !field.currentValue && field.options.length === 0) {
-        field.options = await readDropdownOptions(field);
-      }
+      if (field.currentValue || field.options.length > 0) continue;
+      if (field.type === 'select') field.options = await readDropdownOptions(field);
+      // Search-style lists whose answer must be one of their options (e.g. Degree). Not free-search
+      // boxes like Skills or Field of Study, which are matched by searching instead.
+      else if (field.type === 'prompt' && /degree|level of education|qualification/i.test(field.label)) field.options = await readPromptOptions(field);
     }
 
     const decisions = await mapFields(fields, profile, answers, askAi);
@@ -56,7 +58,16 @@ export async function fillCurrentPage(): Promise<PageReport> {
       if (decision.status !== 'fill' || decision.value === null) continue;
       if ((await runState.getValue()).stopRequested) break;
 
-      const outcome = await fillOne(field, decision.value);
+      let outcome = await fillOne(field, decision.value);
+      // Recovery: our value wasn't in the list, but now we know the real options (e.g. "Computer Science
+      // and Engineering" vs "Computer Science"). Ask the AI to pick one of them. Never for Answers/EEO values.
+      if (!outcome.ok && outcome.options?.length && decision.source !== 'answers' && typeof decision.value === 'string') {
+        const retry = await pickFromSeenOptions(field, outcome.options);
+        if (retry) {
+          outcome = await fillOne(field, retry.value);
+          if (outcome.ok) Object.assign(report, { source: 'ai', confidence: retry.confidence, reason: `${decision.reason} → closest option (AI)` });
+        }
+      }
       report.outcome = outcome.ok ? 'filled' : 'failed';
       report.shownValue = outcome.ok ? outcome.value : undefined;
       if (!outcome.ok) report.outcomeNote = outcome.options?.length ? `${outcome.reason} Choices: ${outcome.options.slice(0, 8).join(', ')}` : outcome.reason;
@@ -67,6 +78,50 @@ export async function fillCurrentPage(): Promise<PageReport> {
   const result: PageReport = { page, kind, fields: [...reports.values()] };
   await recordPage(result);
   return result;
+}
+
+/**
+ * Workday marked some fields with an error. Optional ones (no required star) are not worth stopping
+ * for: clear them so the page can be saved. Returns true if anything was cleared.
+ */
+async function clearRejectedOptionalFields(): Promise<boolean> {
+  let cleared = false;
+  const fields = scanPage();
+  for (const field of fields) {
+    if (field.required || !field.currentValue) continue;
+    const element = elementFor(field);
+    const box = element?.closest('[data-automation-id^="formField"]') ?? element?.parentElement;
+    const hasError = box && deepQueryAll(box, '[role="alert"], [aria-invalid="true"], [data-automation-id*="error" i]').some((el) => isVisible(el) || el.getAttribute('aria-invalid') === 'true');
+    if (!hasError || !element) continue;
+    if (field.type === 'text' || field.type === 'textarea') {
+      await fillField(field, '');
+      cleared = true;
+    } else if (field.type === 'date') {
+      element.querySelectorAll<HTMLInputElement>('input').forEach((input) => (input.value = ''));
+      cleared = true;
+    }
+    if (cleared) {
+      const state = await runState.getValue();
+      const pages = state.pages.map((p) => ({
+        ...p,
+        fields: p.fields.map((f) => (f.fieldId === field.id ? { ...f, outcome: undefined, status: 'skip' as const, reason: 'Optional field Workday rejected — left empty' } : f)),
+      }));
+      await updateRun({ pages });
+    }
+  }
+  return cleared;
+}
+
+/** One small AI call: which of these real options fits this field? Only confident answers are used. */
+async function pickFromSeenOptions(field: FieldDescriptor, options: string[]): Promise<{ value: string; confidence: number } | null> {
+  try {
+    const [answer] = await askAi([{ ...field, type: 'select', options }]);
+    if (!answer?.value || answer.confidence < 0.6) return null;
+    const option = options.find((o) => o === answer.value) ?? options.find((o) => o.toLowerCase() === answer.value!.toLowerCase());
+    return option ? { value: option, confidence: answer.confidence } : null;
+  } catch {
+    return null;
+  }
 }
 
 async function askAi(fields: FieldDescriptor[]) {
@@ -170,7 +225,11 @@ export async function runAllPages({ resumed = false } = {}): Promise<void> {
     }
 
     await updateRun({ message: `Going to the next page…` });
-    const moved = await goToNextPage();
+    let moved = await goToNextPage();
+    if (!moved.moved && moved.errors.length > 0 && (await clearRejectedOptionalFields())) {
+      await updateRun({ message: 'Cleared optional fields Workday rejected; trying again…' });
+      moved = await goToNextPage();
+    }
     if (!moved.moved) {
       await updateRun({ status: 'needs_user', message: `${moved.reason} ${moved.errors.join(' · ')} Fix it on the page, then press Continue.`.trim() });
       return;

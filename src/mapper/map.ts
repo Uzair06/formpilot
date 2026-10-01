@@ -74,6 +74,11 @@ const ALTERNATIVE_WORDINGS: Record<string, string[]> = {
   'I am a protected veteran': ['I identify as one or more of the classifications of protected veteran', 'Yes'],
   'I am a veteran, but not a protected veteran': ['I am not a protected veteran'],
   'Two or more races': ['Two or More Races (Not Hispanic or Latino)'],
+  "Bachelor's Degree": ["Bachelor's", 'Bachelors Degree', 'Bachelors', 'Bachelor', 'Bachelor Degree', 'Undergraduate Degree', 'Undergraduate'],
+  "Master's Degree": ["Master's", 'Masters Degree', 'Masters', 'Master', 'Master Degree', 'Postgraduate Degree', 'Graduate Degree'],
+  Doctorate: ['Doctoral Degree', 'Doctorate Degree', 'PhD', 'Ph.D.', 'Doctor of Philosophy'],
+  "Associate's Degree": ["Associate's", 'Associates Degree', 'Associate Degree', 'Associates'],
+  'High School Diploma': ['High School', 'High School or Equivalent', 'Secondary School', 'GED'],
   'Yes, I have a disability (or had one in the past)': ['Yes, I have a disability', 'Yes'],
   'No, I do not have a disability': ['No, I do not have a disability and have not had one in the past', 'No'],
 };
@@ -82,7 +87,7 @@ const ALTERNATIVE_WORDINGS: Record<string, string[]> = {
 function withRealOption(field: FieldDescriptor, rule: RuleResult): Omit<FieldDecision, 'fieldId' | 'label'> & { needsAi?: boolean } {
   const base = { ...rule, confidence: rule.confidence ?? 1 };
   if (rule.status !== 'fill' || typeof rule.value !== 'string' || field.options.length === 0) return base;
-  if (!['select', 'radio'].includes(field.type)) return base;
+  if (!['select', 'radio', 'prompt'].includes(field.type)) return base;
 
   const wanted = rule.value;
   const option =

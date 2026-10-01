@@ -19,6 +19,12 @@ describe('matchOption', () => {
     expect(matchOption('Germany', countries)).toBeNull();
   });
 
+  it('takes the plain "X Degree" option when the wanted words match several', () => {
+    const degrees = ["Associate's Degree", "Bachelor's Degree", "Bachelor's Degree (Honours)", "Master's Degree"];
+    expect(matchOption("Bachelor's", degrees)).toBe("Bachelor's Degree");
+    expect(matchOption('Bachelor’s', degrees)).toBe("Bachelor's Degree"); // curly apostrophe
+  });
+
   it('refuses when the answer is ambiguous', () => {
     expect(matchOption('United', countries)).toBeNull();
   });

@@ -30,13 +30,13 @@ function addChip(box, t, multi) {
   wrap.querySelector('.count').textContent = `${all.length} item${all.length === 1 ? '' : 's'} selected, ${all.join(', ')}`;
 }
 const date = (id, label, required, parts) =>
-  `<div data-automation-id="formField-${id}"><label>${label}${required ? '*' : ''}</label><div>${parts
+  `<div data-automation-id="formField-${id}" class="date"><label>${label}${required ? '*' : ''}</label><div>${parts
     .map((p) => `<input data-automation-id="dateSection${p}-input" aria-label="${p}" ${required ? 'aria-required="true"' : ''}>`).join('')}</div></div>`;
 
 const OPTIONS = {
   state: ['Delhi', 'Karnataka', 'Maharashtra'],
   phoneType: ['Home', 'Mobile', 'Work'],
-  degree: ["Bachelor's Degree", "Master's Degree", 'Doctorate'],
+  degree: ["Associate's", "Bachelor's", "Bachelor's (Honours)", "Master's", 'Doctorate', 'High School'],
   authorized: ['Yes', 'No'],
   sponsorship: ['Yes', 'No'],
   ethnicity: ['Asian (Not Hispanic or Latino)', 'White (Not Hispanic or Latino)', 'I do not wish to answer'],
@@ -128,11 +128,22 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') document.querySelectorAll('[role=listbox]').forEach((l) => l.remove());
   if (e.key === 'Enter' && SEARCH[e.target.id]) showSuggestions(e.target);
   if ((e.key === 'ArrowDown' || e.key === 'Enter') && e.target.id === 'fieldOfStudy') openStudyList(e.target);
+  if (e.key === 'ArrowDown' && e.target.id === 'degree') openList(e.target, OPTIONS.degree, (t) => addChip(e.target, t, false));
+});
+// Like Workday: deleting while the search box is already empty removes the last picked item.
+document.addEventListener('beforeinput', (e) => {
+  const box = e.target;
+  if (box.dataset && box.dataset.automationId === 'searchBox' && !box.value && (e.inputType.startsWith('delete') || (e.inputType === 'insertText' && !e.data))) {
+    const chips = box.closest('div').querySelector('.chips');
+    chips.lastElementChild?.remove();
+    const all = [...chips.children].map((c) => c.textContent);
+    box.closest('div').querySelector('.count').textContent = `${all.length} item${all.length === 1 ? '' : 's'} selected${all.length ? ', ' + all.join(', ') : ''}`;
+  }
 });
 // Search boxes: suggestions appear shortly after typing (no Enter needed). Skills is multi-select.
 let typingTimer;
 document.addEventListener('input', (e) => {
-  if (!SEARCH[e.target.id]) return;
+  if (!SEARCH[e.target.id] || e.target.id === 'skills') return; // Skills searches only on Enter
   clearTimeout(typingTimer);
   typingTimer = setTimeout(() => showSuggestions(e.target), 300);
 });
@@ -140,10 +151,15 @@ function showSuggestions(box) {
   if (!box.value) return;
   const results = SEARCH[box.id].filter((t) => t.toLowerCase().includes(box.value.toLowerCase()));
   if (!results.length) return document.querySelectorAll('[role=listbox]').forEach((l) => l.remove());
-  openList(box, results, (t) => { addChip(box, t, box.id === 'skills'); box.value = ''; });
+  openList(box, results, (t) => {
+    addChip(box, t, box.id === 'skills');
+    box.value = '';
+    if (box.id === 'skills') setTimeout(() => openList(box, results.filter((r) => r !== t), () => {}), 0); // stays open, like Workday
+  });
 }
 document.addEventListener('click', (e) => {
   if (e.target.id === 'fieldOfStudy') openStudyList(e.target);
+  if (e.target.id === 'degree') openList(e.target, OPTIONS.degree, (t) => addChip(e.target, t, false));
 });
 function openStudyList(box) {
   document.querySelectorAll('[role=listbox]').forEach((l) => l.remove());
@@ -183,7 +199,7 @@ document.addEventListener('click', (e) => {
   if (e.target.id === 'addJob') addEntry('jobs', text('tID', 'Job Title', true) + text('cID', 'Company', true) + text('lID', 'Location', false) +
     '<label><input type="checkbox" id="curID"> I currently work here</label>' + date('fID', 'From', true, ['Month', 'Year']) + date('toID', 'To', false, ['Month', 'Year']) +
     field('dID', 'Role Description', '<textarea id="dID"></textarea>'), 'addJob');
-  if (e.target.id === 'addSchool') addEntry('schools', text('sID', 'School or University', true) + select('degree', 'Degree', true).replace('id="degree"', 'id="degree" data-x="ID"') +
+  if (e.target.id === 'addSchool') addEntry('schools', text('sID', 'School or University', true) + prompt('degree', 'Degree', true).replace(/id="degree"/, 'id="degree" data-n="ID"') +
     prompt('fieldOfStudy', 'Field of Study', false).replace(/id="fieldOfStudy"/, 'id="fieldOfStudy" data-n="ID"') + text('gID', 'Overall Result (GPA)', false) +
     date('syID', 'From', false, ['Year']) + date('eyID', 'To (Actual or Expected)', false, ['Year']), 'addSchool');
   if (e.target.id === 'addSite') addEntry('sites', text('uID', 'URL', true), 'addSite');
@@ -193,9 +209,27 @@ document.addEventListener('change', (e) => {
   if (e.target.id === 'resume' && e.target.files[0]) document.getElementById('uploaded').textContent = 'Uploaded: ' + e.target.files[0].name;
 });
 
+// Workday-like dates: the typed value only counts once focus leaves the whole date box.
+document.addEventListener('focusout', (e) => {
+  const box = e.target.closest && e.target.closest('.date');
+  if (!box) return;
+  setTimeout(() => {
+    if (!box.contains(document.activeElement)) box.querySelectorAll('input').forEach((i) => (i.dataset.saved = i.value));
+  }, 0);
+});
 document.getElementById('next').addEventListener('click', () => {
   const page = document.getElementById('page');
+  const skillChips = page.querySelector('#skills')?.closest('div').querySelectorAll('[data-automation-id=selectedItem]');
+  if (skillChips) window.__skillsOnPage = [...skillChips].map((c) => c.textContent);
+  page.querySelectorAll('.gpa-error').forEach((e) => e.remove());
+  const badGpa = [...page.querySelectorAll('input[id^="g"]')].filter((i) => /GPA/.test(i.closest('div').textContent) && i.value.includes('/'));
+  badGpa.forEach((i) => i.insertAdjacentHTML('afterend', '<div role="alert" class="gpa-error" data-automation-id="errorMessage">Enter a number</div>'));
+  const badLinkedIn = [...page.querySelectorAll('#linkedin')].filter((i) => i.value && !/^https:\/\/www\.linkedin\.com\/in\//.test(i.value));
+  const unsavedDates = [...page.querySelectorAll('.date input[aria-required=true]')].filter((i) => i.dataset.saved !== i.value || !i.value);
   const missing = [
+    ...badLinkedIn,
+    ...badGpa,
+    ...unsavedDates,
     ...[...page.querySelectorAll('input[aria-required=true]:not([type=radio]):not([type=checkbox]):not([data-automation-id=searchBox])')].filter((i) => !i.value || i.value === 'Select One'),
     ...[...page.querySelectorAll('[data-automation-id=searchBox][aria-required=true]')].filter((i) => !i.closest('div').querySelector('[data-automation-id=selectedItem]')),
     ...[...page.querySelectorAll('button[aria-required=true]')].filter((b) => b.textContent === 'Select One'),

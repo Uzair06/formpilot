@@ -12,6 +12,8 @@ const root = resolve(here, '../..');
 const html = readFileSync(resolve(here, 'fake-workday.html'), 'utf8');
 const expected = readFileSync(resolve(root, 'tests/fixtures/resumes/alex-rivera.expected.ts'), 'utf8');
 const profile = eval(`(${expected.slice(expected.indexOf('= {') + 2, expected.lastIndexOf('};') + 1)})`);
+profile.links.linkedin = 'https://linkedin.com/in/alex-rivera-example'; // short form Workday rejects
+profile.education[1].fieldOfStudy = 'Computer Science and Engineering'; // not in the list: AI must pick a real option
 const resumePdf = readFileSync(resolve(root, 'tests/fixtures/resumes/alex-rivera.pdf'));
 const ext = resolve(root, '.output/chrome-mv3');
 
@@ -19,7 +21,15 @@ const ext = resolve(root, '.output/chrome-mv3');
 function fakeGemini(body) {
   const { fields } = JSON.parse(body.contents[0].parts[0].text);
   const answers = fields.map((f) => {
-    if (/degree/i.test(f.label)) return { id: f.id, value: /1$/.test(f.section) ? "Master's Degree" : "Bachelor's Degree", confidence: 0.9, reason: 'M.S. / B.S. on resume' };
+    if (/field of study/i.test(f.label) && f.options?.includes('Computer Engineering')) {
+      return { id: f.id, value: 'Computer Engineering', confidence: 0.8, reason: 'Closest to Computer Science and Engineering' };
+    }
+    if (/degree/i.test(f.label)) {
+      const wanted = /1$/.test(f.section) ? "Master's Degree" : "Bachelor's Degree";
+      // Like a real model: exact wording only if it was shown the options, otherwise a vague guess.
+      const value = f.options?.includes(wanted) ? wanted : wanted.replace(' Degree', '');
+      return { id: f.id, value, confidence: 0.9, reason: 'M.S. / B.S. on resume' };
+    }
     return { id: f.id, value: null, confidence: 0, reason: 'Not in the resume' };
   });
   return { candidates: [{ content: { parts: [{ text: JSON.stringify({ answers }) }] }, finishReason: 'STOP' }] };
@@ -115,10 +125,14 @@ try {
   check(JSON.stringify(shown(exp, 'Company')) === '["Example Compute Inc.","Sample Storage Systems"]', 'companies filled per job');
   check(JSON.stringify(shown(exp, 'From')).includes('03/2022') && JSON.stringify(shown(exp, 'From')).includes('06/2019'), `job start dates (${JSON.stringify(shown(exp, 'From'))})`);
   check(JSON.stringify(shown(exp, 'To')).includes('02/2022'), 'end date only for the past job');
+  check(!/From|To/.test(stop.message), 'dates count as filled on the page (focus left the date box)');
   check(JSON.stringify(shown(exp, 'School or University')) === '["University of Example","Sample State University"]', 'one entry per school');
-  check(JSON.stringify(shown(exp, 'Degree')) === `["Master's Degree","Bachelor's Degree"]`, `degree chosen by AI from real options (${JSON.stringify(shown(exp, 'Degree'))})`);
-  check(JSON.stringify(shown(exp, 'Field of Study')) === '["Computer Science","Computer Engineering"]', `field of study picked from a long scrolling list (${JSON.stringify(shown(exp, 'Field of Study'))})`);
+  check(JSON.stringify(shown(exp, 'Degree')) === `["Master's","Bachelor's"]`, `degree M.S./B.S. → the form's wording (${JSON.stringify(shown(exp, 'Degree'))})`);
+  check(JSON.stringify(shown(exp, 'Field of Study')) === '["Computer Science","Computer Engineering"]', `field of study for both schools, AI picks a real option when needed (${JSON.stringify(shown(exp, 'Field of Study'))})`);
+  check(exp.some((f) => /Overall Result/.test(f.label) && /rejected/.test(f.reason)), 'optional GPA rejected by the page → cleared, run continued');
   check(shown(exp, 'Type to Add Skills')[0] === 'C++, Python, CUDA, MPI, Kubernetes, Linux', `several skills typed and picked (${shown(exp, 'Type to Add Skills')[0]})`);
+  const skillsOnPage = await page.evaluate(() => window.__skillsOnPage);
+  check(JSON.stringify(skillsOnPage) === '["C++","Python","CUDA","MPI","Kubernetes","Linux"]', `all skills still on the page when leaving it (${JSON.stringify(skillsOnPage)})`);
   check(!/No fields found|did not change|errors/.test(stop.message), 'moved from page to page by itself (slow load + "Saving…" message)');
   check(one(exp, '')?.outcome === 'filled' || exp.some((f) => f.reason === 'Your resume file' && f.outcome === 'filled'), 'resume file uploaded');
   check(JSON.stringify(shown(exp, 'URL')) === '["https://github.com/alex-rivera-example","https://alexrivera.example.com"]', `websites added (${JSON.stringify(shown(exp, 'URL'))})`);
