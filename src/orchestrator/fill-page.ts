@@ -15,8 +15,20 @@ import { recordPage, runState, updateRun, type FieldReport, type PageReport } fr
 
 // The Orchestrator: fills one page, or walks through all pages until Review.
 
-const MAX_PASSES = 3; // new questions can appear after answering one; re-scan up to this many times
+// Workday redraws the whole question area after some choices. Re-scan after each
+// redraw-triggering field rather than trying to fill controls from the old DOM.
+const MAX_PASSES = 12;
 const MAX_PAGES = 12;
+
+/** Stable enough across a Workday re-render, unlike the temporary DOM field id. */
+function reportKey(field: FieldDescriptor): string {
+  return [field.type, field.section, field.label, field.automationId].join('|');
+}
+
+/** Selecting one of these can replace the remaining controls in Workday's React UI. */
+function redrawsQuestionArea(field: FieldDescriptor): boolean {
+  return field.type === 'select' || field.type === 'radio' || field.type === 'checkbox' || field.type === 'prompt';
+}
 
 /** Fills every field it can on the current page and returns what it did. */
 export async function fillCurrentPage(): Promise<PageReport> {
@@ -38,7 +50,9 @@ export async function fillCurrentPage(): Promise<PageReport> {
     if ((await runState.getValue()).stopRequested) break;
     const scanned = scanPage();
     labelRepeatSections(scanned); // "Work Experience 2" etc., from the page structure
-    const fields = scanned.filter((f) => !reports.has(f.id));
+    // `data-formpilot-id` belongs to a DOM node. Workday replaces those nodes after
+    // a selection, so use the field meaning as the completed-work key instead.
+    const fields = scanned.filter((f) => !reports.has(reportKey(f)));
     if (fields.length === 0) break;
 
     // Workday drop-downs only show their choices when opened: read them so answers can be checked.
@@ -54,7 +68,7 @@ export async function fillCurrentPage(): Promise<PageReport> {
     for (const decision of decisions) {
       const field = fields.find((f) => f.id === decision.fieldId)!;
       const report: FieldReport = { ...decision };
-      reports.set(field.id, report);
+      reports.set(reportKey(field), report);
       if (decision.status !== 'fill' || decision.value === null) continue;
       if ((await runState.getValue()).stopRequested) break;
 
@@ -71,6 +85,13 @@ export async function fillCurrentPage(): Promise<PageReport> {
       report.outcome = outcome.ok ? 'filled' : 'failed';
       report.shownValue = outcome.ok ? outcome.value : undefined;
       if (!outcome.ok) report.outcomeNote = outcome.options?.length ? `${outcome.reason} Choices: ${outcome.options.slice(0, 8).join(', ')}` : outcome.reason;
+
+      // Do not touch the next descriptor from this scan: it may point to a DOM
+      // node Workday just removed. The next pass gets fresh controls instead.
+      if (outcome.ok && redrawsQuestionArea(field)) {
+        await waitForQuiet({ quietMs: 250, timeoutMs: 2_000 });
+        break;
+      }
     }
     await waitForQuiet({ quietMs: 300, timeoutMs: 3_000 });
   }

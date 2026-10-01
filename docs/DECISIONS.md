@@ -63,3 +63,4 @@ One line per non-obvious decision.
 - 2026-10-02 — Degree is mapped by rule: resume wording → standard level (B.Tech/B.S./BSc → Bachelor's, M.S./MBA → Master's, Ph.D. → Doctorate…), then common form wordings are tried ("Bachelor's Degree", "Bachelor's", "Bachelors"…). The AI is used only if none match.
 - 2026-10-02 — If a value isn't in a list, one small AI call picks from the options FormPilot actually saw (≥ 0.6 confidence), then it retries. Never for Answers/EEO values.
 - 2026-10-02 — If Workday rejects optional fields (no required star) after Next, FormPilot clears them and presses Next again, instead of stopping.
+- 2026-10-02 — After filling a select, radio, checkbox, or prompt, FormPilot re-scans before filling the next field. Workday can replace the remaining controls after a choice, making old DOM references invalid; reports use the field meaning rather than that temporary DOM id.

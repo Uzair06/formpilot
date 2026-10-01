@@ -29,7 +29,7 @@ export const CONSENT_PATTERN = /agree|acknowledge|consent|terms|privacy|certify|
 
 const YES_NO_PATTERNS: Array<[YesNoKey, RegExp]> = [
   ['needsSponsorship', /sponsor|visa|immigration/],
-  ['workAuthorized', /(legally )?(authori[sz]ed|eligible|permitted|right) (to work|for employment)|work authori[sz]ation|employment authori[sz]ation/],
+  ['workAuthorized', /(legally )?(authori[sz]ed|eligible|permitted|right) (to work|for employment|in (the )?(united states|u s|usa|country))|work authori[sz]ation|employment authori[sz]ation/],
   ['willingToRelocate', /relocat/],
   ['over18', /18 years|age of 18|at least 18|over 18/],
   ['previouslyWorkedAtCompany', /(previously|ever|have you) (been )?(worked|employed)|former (employee|worker)|worked (for|at) (nvidia|this company|us) before|(been|are you currently,? or have you been) an? (contractor|employee) (with|of|at|for)/],

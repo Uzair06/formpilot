@@ -66,6 +66,49 @@ describe('mapFields', () => {
     expect(ai).not.toHaveBeenCalled();
   });
 
+  it('matches the full NVIDIA EEO option text from the Answers tab', async () => {
+    const a = answers();
+    a.eeo.ethnicity = 'asian';
+    a.eeo.gender = 'male';
+    a.eeo.veteran = 'not_veteran';
+    const ai = vi.fn(async () => []);
+    const decisions = await mapFields(
+      [
+        field('What is your ethnicity?', { type: 'select', options: ['Asian (Not Hispanic or Latino) (United States of America)', 'White (Not Hispanic or Latino) (United States of America)'] }),
+        field('What is your gender?', { type: 'select', options: ['Male', 'Female'] }),
+        field('Do you identify as one of the following protected veterans?', { type: 'select', options: ['I AM NOT A VETERAN', 'I AM A PROTECTED VETERAN'] }),
+      ],
+      PROFILE,
+      a,
+      ai,
+    );
+    expect(decisions.map((d) => [d.value, d.status])).toEqual([
+      ['Asian (Not Hispanic or Latino) (United States of America)', 'fill'],
+      ['Male', 'fill'],
+      ['I AM NOT A VETERAN', 'fill'],
+    ]);
+    expect(ai).not.toHaveBeenCalled();
+  });
+
+  it('recognizes the US work authorization and visa sponsorship questions', async () => {
+    const a = answers();
+    a.workAuthorized = 'no';
+    a.needsSponsorship = 'yes';
+    const decisions = await mapFields(
+      [
+        field('Are you legally authorized to work in the United States?', { type: 'select', options: ['Yes', 'No'] }),
+        field('Will you now or in the future require sponsorship for employment visa status (e.g. H-1B visa status)?', { type: 'select', options: ['Yes', 'No'] }),
+      ],
+      PROFILE,
+      a,
+      noAi,
+    );
+    expect(decisions.map((d) => [d.value, d.source, d.status])).toEqual([
+      ['No', 'answers', 'fill'],
+      ['Yes', 'answers', 'fill'],
+    ]);
+  });
+
   it('never ticks consent boxes and never answers sensitive questions', async () => {
     const ai = vi.fn(async () => []);
     const decisions = await mapFields(
