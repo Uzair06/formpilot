@@ -3,7 +3,7 @@ import { FIELD_ID_ATTR } from '@/src/scanner/scan';
 import type { FieldDescriptor } from '@/src/scanner/types';
 import { matchOption, normalize } from '@/src/shared/match-option';
 import { waitFor, waitForQuiet } from '@/src/shared/wait';
-import { blur, focus, pressKey, realClick, setNativeValue } from './events';
+import { blur, focus, pressKey, realClick, setNativeValue, typeLikeKeyboard } from './events';
 
 // Puts a value into one field, the way a person would, then reads it back to check it stuck.
 
@@ -44,12 +44,13 @@ export async function fillField(field: FieldDescriptor, value: string, file?: Fi
 // --- text ---
 
 function fillText(input: HTMLInputElement | HTMLTextAreaElement, value: string): FillOutcome {
+  // Workday may reformat (e.g. phone numbers), so compare letters/digits only.
+  const stuck = () => normalize(input.value) === normalize(value);
   focus(input);
   setNativeValue(input, value);
   blur(input);
-  // Workday may reformat (e.g. phone numbers), so compare letters/digits only.
-  const same = normalize(input.value) === normalize(value);
-  return same ? { ok: true, value: input.value } : fail(`The box shows "${input.value}" instead.`);
+  if (!stuck()) typeLikeKeyboard(input, value);
+  return stuck() ? { ok: true, value: input.value } : fail(`The box shows "${input.value}" instead.`);
 }
 
 // --- drop-downs ---
@@ -64,17 +65,45 @@ function fillNativeSelect(select: HTMLSelectElement, value: string): FillOutcome
   return { ok: true, value: cleanText(option.textContent) };
 }
 
+const OPTION_SELECTOR = '[role="option"], [data-automation-id="promptOption"], [data-automation-id="menuItem"]';
+
+/** Shown on screen: has a size and isn't display:none (popups may sit under aria-hidden wrappers, so ignore those). */
+const onScreen = (el: Element) => el.getClientRects().length > 0 || !navigator.userAgent.includes('Chrome');
+
 /** The list that a Workday drop-down or search box opened (it is attached at the end of the page). */
 function openList(trigger: Element): HTMLElement | null {
   const controls = trigger.getAttribute('aria-controls') ?? trigger.getAttribute('aria-owns');
   const byId = controls ? document.getElementById(controls) : null;
-  if (byId && isVisible(byId) && byId.querySelector('[role="option"]')) return byId;
-  const lists = deepQueryAll<HTMLElement>(document, '[role="listbox"]').filter((list) => isVisible(list) && list.querySelector('[role="option"]'));
+  if (byId && onScreen(byId) && byId.querySelector(OPTION_SELECTOR)) return byId;
+  const lists = deepQueryAll<HTMLElement>(document, '[role="listbox"], [data-automation-id*="popup" i], [data-automation-id*="dropdown" i]').filter(
+    (list) => onScreen(list) && list.querySelector(OPTION_SELECTOR),
+  );
   return lists.at(-1) ?? null;
 }
 
 const optionElements = (list: Element) =>
-  [...list.querySelectorAll<HTMLElement>('[role="option"]')].filter((option) => cleanText(option.textContent));
+  [...list.querySelectorAll<HTMLElement>(OPTION_SELECTOR)].filter((option) => onScreen(option) && cleanText(option.textContent));
+
+/** Opens a drop-down: a click first, then the keys Workday also listens to. */
+async function openDropdown(trigger: HTMLElement): Promise<HTMLElement | null> {
+  const attempts: Array<() => void> = [
+    () => realClick(trigger),
+    () => {
+      focus(trigger);
+      pressKey(trigger, 'ArrowDown');
+    },
+    () => pressKey(trigger, 'Enter'),
+    () => pressKey(trigger, ' '),
+  ];
+  for (const attempt of attempts) {
+    attempt();
+    const list = await waitFor(() => openList(trigger), { what: 'the drop-down list', timeoutMs: 1_500 }).catch(() => null);
+    if (list) return list;
+  }
+  return null;
+}
+
+const shownValue = (trigger: Element) => cleanText(trigger.tagName === 'INPUT' ? (trigger as HTMLInputElement).value : trigger.textContent);
 
 const optionText = (option: Element) => cleanText(option.getAttribute('aria-label') ?? option.textContent);
 
@@ -83,18 +112,17 @@ export async function readDropdownOptions(field: FieldDescriptor): Promise<strin
   const element = elementFor(field);
   if (!element || field.type !== 'select') return field.options;
   if (element.tagName === 'SELECT') return field.options;
-  realClick(element);
-  const list = await waitFor(() => openList(element), { what: `the "${field.label}" list` }).catch(() => null);
+  const list = await openDropdown(element);
   const options = list ? optionElements(list).map(optionText) : [];
   pressKey(list ?? element, 'Escape');
-  await waitFor(() => !openList(element), { what: 'the list to close', timeoutMs: 2_000 }).catch(() => null);
+  await waitFor(() => !openList(element), { what: 'the list to close', timeoutMs: 1_500 }).catch(() => realClick(element));
   return options;
 }
 
 async function fillDropdown(button: HTMLElement, value: string): Promise<FillOutcome> {
-  if (normalize(cleanText(button.textContent)) === normalize(value)) return { ok: true, value };
-  realClick(button);
-  const list = await waitFor(() => openList(button), { what: 'the drop-down list' });
+  if (normalize(shownValue(button)) === normalize(value)) return { ok: true, value };
+  const list = await openDropdown(button);
+  if (!list) return fail('The drop-down list did not open.');
   const options = optionElements(list);
   const match = matchOption(value, options.map(optionText));
   const option = options.find((o) => optionText(o) === match);
@@ -103,7 +131,14 @@ async function fillDropdown(button: HTMLElement, value: string): Promise<FillOut
     return fail(`"${value}" is not one of the choices.`, options.map(optionText));
   }
   realClick(option);
-  await waitFor(() => normalize(cleanText(button.textContent)).includes(normalize(match!)), { what: 'the choice to show' });
+  const shown = await waitFor(() => normalize(shownValue(button)).includes(normalize(match!)), { what: 'the choice to show', timeoutMs: 3_000 }).catch(() => false);
+  if (!shown) {
+    // Some lists pick on Enter rather than click.
+    focus(option);
+    pressKey(option, 'Enter');
+    const shownAfterKey = await waitFor(() => normalize(shownValue(button)).includes(normalize(match!)), { what: 'the choice to show', timeoutMs: 2_000 }).catch(() => false);
+    if (!shownAfterKey) return fail(`Picked "${match}" but the box still shows "${shownValue(button)}".`);
+  }
   return { ok: true, value: match! };
 }
 
@@ -130,7 +165,9 @@ async function fillPrompt(input: HTMLInputElement, value: string): Promise<FillO
     if (!list) break;
     const options = optionElements(list);
     lastOptions = options.map(optionText);
-    const match = matchOption(value, lastOptions) ?? (options.length === 1 ? lastOptions[0]! : null);
+    // A single search result is taken only if it is clearly the same thing (e.g. "LinkedIn" → "LinkedIn Job Posting").
+    const only = options.length === 1 ? lastOptions[0]! : null;
+    const match = matchOption(value, lastOptions) ?? (only && (normalize(only).includes(normalize(value)) || normalize(value).includes(normalize(only))) ? only : null);
     const option = options.find((o) => optionText(o) === match);
     if (!option) break;
     realClick(option);
@@ -179,6 +216,7 @@ function fillDate(group: HTMLElement, value: string): FillOutcome {
     focus(input);
     setNativeValue(input, partValue);
     blur(input);
+    if (Number(input.value) !== Number(partValue)) typeLikeKeyboard(input, partValue);
   }
   const shown = inputs.map((input) => input.value).filter(Boolean).join('/');
   const digits = (text: string) => text.replace(/\D/g, '').replace(/^0+/, '');

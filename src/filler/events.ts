@@ -34,3 +34,16 @@ export function blur(element: Element): void {
   element.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
   (element as HTMLElement).blur?.();
 }
+
+/**
+ * Second way to type, used when a widget ignores setNativeValue: select the box's text and
+ * insert new text the way the keyboard does, so the page sees genuine input events.
+ */
+export function typeLikeKeyboard(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  focus(element);
+  element.select?.();
+  // execCommand is old but still the only way to make the browser itself insert text.
+  const inserted = document.execCommand?.('insertText', false, value);
+  if (!inserted) setNativeValue(element, value);
+  blur(element);
+}

@@ -29,10 +29,10 @@ export const CONSENT_PATTERN = /agree|acknowledge|consent|terms|privacy|certify|
 
 const YES_NO_PATTERNS: Array<[YesNoKey, RegExp]> = [
   ['needsSponsorship', /sponsor|visa|immigration/],
-  ['workAuthorized', /(legally )?(authori[sz]ed|eligible|permitted|right) to work|work authori[sz]ation/],
+  ['workAuthorized', /(legally )?(authori[sz]ed|eligible|permitted|right) (to work|for employment)|work authori[sz]ation|employment authori[sz]ation/],
   ['willingToRelocate', /relocat/],
   ['over18', /18 years|age of 18|at least 18|over 18/],
-  ['previouslyWorkedAtCompany', /(previously|ever|have you) (been )?(worked|employed)|former (employee|worker)|worked (for|at) (nvidia|this company|us) before/],
+  ['previouslyWorkedAtCompany', /(previously|ever|have you) (been )?(worked|employed)|former (employee|worker)|worked (for|at) (nvidia|this company|us) before|(been|are you currently,? or have you been) an? (contractor|employee) (with|of|at|for)/],
 ];
 
 export function ruleFor(field: FieldDescriptor, profile: ResumeProfile, answers: AnswersProfile): RuleResult | null {
@@ -46,6 +46,10 @@ export function ruleFor(field: FieldDescriptor, profile: ResumeProfile, answers:
   // --- safety first ---
   if (field.type === 'checkbox' && has(label, CONSENT_PATTERN)) {
     return { value: null, source: 'policy', reason: 'Consent / legal box: please read and tick it yourself', status: 'flag' };
+  }
+  // Consent asked as a Yes/No question (e.g. "By selecting YES you are granting … permission to contact you").
+  if (['select', 'radio'].includes(field.type) && has(label, /by selecting yes|grant(ing)? .{0,40}permission|terms and conditions|privacy policy|i consent/)) {
+    return { value: null, source: 'policy', reason: 'Consent question: please read and answer it yourself', status: 'flag' };
   }
   if (field.type === 'file') return fill('resume', 'Your resume file');
 
@@ -92,9 +96,17 @@ export function ruleFor(field: FieldDescriptor, profile: ResumeProfile, answers:
     if (has(label, /^to\b|end|graduat/)) return fill(school.endYear ? String(school.endYear) : null, 'End year');
   }
 
+  // --- websites (repeatable "URL" entries) ---
+  if (has(section, /^websites?\b/)) {
+    const url = websiteLinks(profile)[repeatIndex(field.section)];
+    return url ? fill(url, 'Website from your resume') : { value: null, source: 'rule', reason: 'No more links in your profile', status: 'skip' };
+  }
+
   // --- personal details ---
   const p = profile.personal;
   if (field.type === 'checkbox' && has(label, /preferred name/)) return { value: 'false', source: 'rule', reason: 'Uses your legal name', status: 'skip' };
+  // "Local" names are for names in another script (e.g. Chinese characters): left empty on purpose.
+  if (has(label, /^local /)) return { value: null, source: 'rule', reason: 'Local-script name: left empty', status: 'skip' };
   if (has(label, /middle name/)) return fill(p.middleName, 'Middle name');
   if (has(label, /preferred name|nickname/)) return fill(p.preferredName, 'Preferred name');
   if (has(label, /first name|given name|forename/)) return fill(p.firstName, 'First name');
@@ -118,9 +130,15 @@ export function ruleFor(field: FieldDescriptor, profile: ResumeProfile, answers:
   if (has(label, /website|portfolio|personal (site|url)/)) return fill(l.portfolio || l.other[0], 'Website');
 
   // --- skills (multi-pick search box) ---
-  if (field.type === 'prompt' && has(label, /skill/)) return fill(profile.skills.slice(0, 25), 'Skills from your resume');
+  if (field.type === 'prompt' && has(label, /skill/)) return fill(profile.skills.slice(0, 15), 'Skills from your resume');
 
   return null;
+}
+
+/** Links for the Websites section (LinkedIn has its own question on Workday forms). */
+export function websiteLinks(profile: ResumeProfile): string[] {
+  const { github, portfolio, other } = profile.links;
+  return [...new Set([github, portfolio, ...other].filter(Boolean))];
 }
 
 function eeoRule(label: string, answers: AnswersProfile): RuleResult | null {

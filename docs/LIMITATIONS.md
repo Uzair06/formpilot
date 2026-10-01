@@ -4,8 +4,8 @@ Known gaps and trade-offs, written honestly. This was built in a 3-day window.
 
 ## Scope and testing
 
-- **Tested company: NVIDIA**, with the posting in the README. The code doesn't depend on NVIDIA: it finds fields by label, and Workday's `data-automation-id` is only a hint. Other Workday tenants such as Target should work, but they were **not tested**. Their custom questions and option wording will differ.
-- Automated end-to-end tests run on a **fake Workday-like page** (`tests/e2e/fake-workday.html`). Real Workday behaviour was checked by hand on the NVIDIA site. Real Workday only allows **one submission per job per account**, so the submit step could be tried for real only once.
+- **Tested company: NVIDIA**, with the posting in the README. The code doesn't depend on NVIDIA: it finds fields by label, and Workday's `data-automation-id` is only a hint. Other Workday career sites should work the same way, but they were not part of this test. Their custom questions and option wording will differ.
+- Automated end-to-end tests run on a **copy of the NVIDIA application's pages** (`tests/e2e/fake-workday.html`, with a fake Gemini). Workday's own widgets are imitated, not copied. Real Workday behaviour was checked by hand on the NVIDIA site. Real Workday only allows **one submission per job per account**, so the submit step could be tried for real only once.
 - Workday changes its UI over time. Label-first matching and ARIA-based widget handling (`role="listbox"` / `option`) reduce breakage, but they can't remove it.
 
 ## Resume parsing
@@ -21,7 +21,7 @@ Known gaps and trade-offs, written honestly. This was built in a 3-day window.
 - Workday "prompt" search boxes with deeply nested categories are handled up to 3 levels. If the search wording doesn't match any option, the field is reported for the user.
 - Date fields are filled through Workday's month/day/year boxes. Unusual date widgets may need manual entry; they show as "failed" in the report.
 - File upload uses the standard file input with a `DataTransfer`. If a tenant only accepts drag-and-drop, the user must upload by hand.
-- Repeatable sections: FormPilot adds Work Experience and Education entries to match the profile. Other repeatable sections (Websites, Languages, Certifications on some tenants) are only filled where entries already exist.
+- Repeatable sections: FormPilot adds Work Experience, Education and Websites entries to match the profile. Other repeatable sections some forms have (Languages, Certifications) are only filled where entries already exist.
 - If Workday pre-fills a field (e.g. from "Autofill with Resume"), FormPilot keeps that value rather than overwriting it, even if the profile differs.
 - Questions FormPilot can't answer confidently are left for the user and listed in the side panel. The assignment says not every question is expected to be completed.
 - A run left mid-way resumes after a page load only within 10 minutes; after that, press "Fill all pages" again.

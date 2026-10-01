@@ -44,6 +44,17 @@ function sectionOf(element: Element, headings: Element[]): string {
   return section;
 }
 
+/**
+ * Workday drop-downs come in a few styles: <button aria-haspopup="listbox">, a read-only
+ * <input role="combobox" aria-haspopup="listbox">, or a button whose empty text is "Select One".
+ */
+function isDropdownTrigger(element: Element): boolean {
+  const haspopup = element.getAttribute('aria-haspopup') === 'listbox';
+  if (element.tagName === 'BUTTON') return haspopup || EMPTY_SELECT_TEXT.test(cleanText(element.textContent));
+  if (element.tagName === 'INPUT') return haspopup && ((element as HTMLInputElement).readOnly || !element.hasAttribute('aria-autocomplete'));
+  return haspopup || element.getAttribute('role') === 'combobox';
+}
+
 /** The part of the page that holds the application form. */
 export function formRoot(doc: Document = document): ParentNode {
   return doc.querySelector('main, [role="main"]') ?? doc.body;
@@ -72,7 +83,7 @@ export function scanPage(root: ParentNode = formRoot()): FieldDescriptor[] {
 
   const controls = deepQueryAll(
     root,
-    'input, textarea, select, button[aria-haspopup="listbox"], [role="combobox"]:not(input)',
+    'input, textarea, select, button, [aria-haspopup="listbox"], [role="combobox"]:not(input)',
   );
 
   for (const element of controls) {
@@ -132,12 +143,13 @@ export function scanPage(root: ParentNode = formRoot()): FieldDescriptor[] {
       continue;
     }
 
-    if (element.tagName === 'BUTTON') {
-      // Workday drop-down: a button that opens a list. Its text is the chosen value.
-      const text = cleanText(element.textContent);
+    if (isDropdownTrigger(element)) {
+      // Workday drop-down: a button (or read-only box) that opens a list. Its text is the chosen value.
+      const text = cleanText(element.tagName === 'INPUT' ? input.value : element.textContent);
       add(element, 'select', { currentValue: EMPTY_SELECT_TEXT.test(text) ? '' : text });
       continue;
     }
+    if (element.tagName !== 'INPUT' && (element.tagName === 'BUTTON' || element.getAttribute('role') === 'combobox')) continue; // other buttons aren't fields
 
     if (kind === 'textarea') {
       add(element, 'textarea', { currentValue: (element as HTMLTextAreaElement).value });

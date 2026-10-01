@@ -9,7 +9,8 @@ import { scanPage } from '@/src/scanner/scan';
 import { pageInfo } from '@/src/scanner/snapshot';
 import type { FieldDescriptor } from '@/src/scanner/types';
 import { waitFor, waitForQuiet } from '@/src/shared/wait';
-import { EDUCATION, ensureEntries, labelRepeatSections, WORK } from './repeat-sections';
+import { websiteLinks } from '@/src/mapper/rules';
+import { EDUCATION, ensureEntries, labelRepeatSections, WEBSITES, WORK } from './repeat-sections';
 import { recordPage, runState, updateRun, type FieldReport, type PageReport } from './run-state';
 
 // The Orchestrator: fills one page, or walks through all pages until Review.
@@ -30,6 +31,7 @@ export async function fillCurrentPage(): Promise<PageReport> {
   // Repeatable sections: make sure there is one entry per job / school.
   await ensureEntries(WORK, profile.workExperience.length);
   await ensureEntries(EDUCATION, profile.education.length);
+  await ensureEntries(WEBSITES, websiteLinks(profile).length);
 
   const reports = new Map<string, FieldReport>();
   for (let pass = 0; pass < MAX_PASSES; pass++) {

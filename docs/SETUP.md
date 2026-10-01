@@ -45,7 +45,7 @@ If the Autofill tab says "Open a Workday job application page…", refresh the W
 | Command | What it runs |
 |---|---|
 | `npm test` | 115 unit and component tests (Vitest + happy-dom), fully offline |
-| `npm run test:e2e` | Builds the extension and runs the full flow in Chromium on `tests/e2e/fake-workday.html`, served at a `myworkdayjobs.com` address. It covers fill, Next, EEO, consent, Review, and submitting only on request. Needs `npx playwright install chromium` once. |
+| `npm run test:e2e` | Builds the extension and runs the whole flow in Chromium on `tests/e2e/fake-workday.html`, a copy of the **NVIDIA application's pages and fields** served at a `myworkdayjobs.com` address. Gemini is replaced by a small fake. 35 checks cover every field type, repeatable entries, resume upload, AI-chosen options, EEO, Terms, Continue, Review and confirm-to-submit. Needs `npx playwright install chromium` once. |
 | `GEMINI_API_KEY=… npm run test:live` | Parses the fake test resume with the real Gemini API and checks the result. `GEMINI_MODEL=…` is optional. |
 | `npm run compile` | TypeScript type check |
 

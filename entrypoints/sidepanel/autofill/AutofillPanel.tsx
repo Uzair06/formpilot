@@ -115,6 +115,11 @@ export default function AutofillPanel() {
             <strong>{STATUS_TEXT[run.status]}</strong>
           </p>
           {run.message && <p>{run.message}</p>}
+          {['needs_user', 'stopped', 'error', 'awaiting_auth'].includes(run.status) && (
+            <button type="button" onClick={() => send('runAll')} disabled={running}>
+              Continue
+            </button>
+          )}
         </div>
       )}
 
@@ -129,6 +134,12 @@ export default function AutofillPanel() {
               <p>
                 <strong>Submit this application now?</strong> You can only submit once per job. Make sure the Review page and the list below are right.
               </p>
+              {run.pages.reduce((n, p) => n + countAttention(p.fields), 0) > 0 && (
+                <p className="error">
+                  {run.pages.reduce((n, p) => n + countAttention(p.fields), 0)} item(s) below were marked as needing you. Check them on
+                  the Review page before submitting.
+                </p>
+              )}
               <div className="row">
                 <button type="button" onClick={() => send('submitApplication').then(() => setConfirming(false))}>
                   Yes, submit

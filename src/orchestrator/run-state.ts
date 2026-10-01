@@ -40,6 +40,13 @@ export async function updateRun(change: Partial<RunState>): Promise<RunState> {
 
 export async function recordPage(report: PageReport): Promise<void> {
   const current = await runState.getValue();
+  const previous = current.pages.find((p) => p.page.title === report.page.title);
+  // On a re-run (e.g. after "Continue"), fields FormPilot already filled now look "prefilled":
+  // keep the earlier "filled" entry so the report still shows what FormPilot did.
+  const fields = report.fields.map((field) => {
+    const before = previous?.fields.find((f) => f.fieldId === field.fieldId);
+    return field.source === 'prefilled' && before?.outcome === 'filled' ? before : field;
+  });
   const pages = current.pages.filter((p) => p.page.title !== report.page.title);
-  await updateRun({ pages: [...pages, report] });
+  await updateRun({ pages: [...pages, { ...report, fields }] });
 }

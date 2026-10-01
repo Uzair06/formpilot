@@ -1,105 +1,168 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>Fake Workday</title></head>
+<html><head><meta charset="utf-8"><title>Fake Workday (NVIDIA-style)</title></head>
 <body>
+<!-- A small imitation of the NVIDIA Workday application, built from the fields seen on the real form
+     (2026-10-01). Widget behaviour is approximated; this is NOT Workday's code. Used by run-fake-workday.mjs. -->
 <header><input aria-label="Search" data-automation-id="keywordSearchInput"></header>
 <main>
-  <div data-automation-id="progressBarActiveStep">current step 2 of 4<span id="stepTitle">My Information</span></div>
+  <div data-automation-id="progressBarActiveStep">current step 2 of 7<span id="stepTitle">My Information</span></div>
   <div id="page"></div>
   <div role="alert" id="err" hidden></div>
   <button data-automation-id="pageFooterNextButton" id="next">Save and Continue</button>
 </main>
 <script>
-// A tiny imitation of Workday widgets, for testing FormPilot end to end. Not real Workday code.
-const pages = {
-  'My Information': `
-    <h2>My Information</h2>
-    <div data-automation-id="formField-firstName"><label for="fn">Given Name(s)*</label><input id="fn" aria-required="true"></div>
-    <div data-automation-id="formField-lastName"><label for="ln">Family Name*</label><input id="ln" aria-required="true"></div>
-    <div data-automation-id="formField-email"><label for="em">Email Address</label><input id="em" type="email"></div>
-    <div data-automation-id="formField-phoneType"><label id="ptl">Phone Device Type*</label>
-      <button id="pt" aria-haspopup="listbox" aria-labelledby="ptl" aria-required="true">Select One</button></div>
-    <div data-automation-id="formField-phone"><label for="ph">Phone Number*</label><input id="ph" aria-required="true"></div>
-    <div data-automation-id="formField-source"><label for="src">How Did You Hear About Us?*</label><div class="chips"></div>
-      <input id="src" data-automation-id="searchBox" aria-required="true"></div>`,
-  'My Experience': `
-    <h2>My Experience</h2>
-    <h3>Work Experience</h3><div id="jobs"></div><button aria-label="Add Work Experience" id="addJob">Add</button>
-    <h3>Education</h3><div id="schools"></div><button aria-label="Add Education" id="addSchool">Add</button>`,
-  'Application Questions': `
-    <h2>Application Questions</h2>
-    <fieldset><legend>Are you legally authorized to work in the United States?*</legend>
-      <label><input type="radio" name="q1"> Yes</label><label><input type="radio" name="q1"> No</label></fieldset>
-    <fieldset><legend>Will you now or in the future require visa sponsorship?*</legend>
-      <label><input type="radio" name="q2"> Yes</label><label><input type="radio" name="q2"> No</label></fieldset>
-    <div data-automation-id="formField-available"><label>Available start date</label>
-      <div><input data-automation-id="dateSectionMonth-input" aria-label="Month"><input data-automation-id="dateSectionYear-input" aria-label="Year"></div></div>
-    <label><input type="checkbox" id="agree"> I agree to the terms and conditions</label>
-    <div data-automation-id="formField-gender"><label id="gl">Gender</label><button id="gender" aria-haspopup="listbox" aria-labelledby="gl">Select One</button></div>`,
-  'Review': `<h2>Review</h2><p>Check your answers.</p><button id="submit">Submit</button>`,
+const field = (id, label, input, required = false) =>
+  `<div data-automation-id="formField-${id}"><label for="${id}" id="${id}-label">${label}${required ? '*' : ''}</label>${input}</div>`;
+const text = (id, label, required, value = '') => field(id, label, `<input id="${id}" ${required ? 'aria-required="true"' : ''} value="${value}">`, required);
+const select = (id, label, required, value = 'Select One') =>
+  `<div data-automation-id="formField-${id}"><label id="${id}-label">${label}${required ? '*' : ''}</label><button id="${id}" aria-haspopup="listbox" aria-labelledby="${id}-label" ${required ? 'aria-required="true"' : ''}>${value}</button></div>`;
+const prompt = (id, label, required, chips = []) =>
+  `<div data-automation-id="formField-${id}"><label for="${id}">${label}${required ? '*' : ''}</label>
+     <div class="chips">${chips.map((c) => `<div data-automation-id="selectedItem">${c}</div>`).join('')}</div>
+     <input id="${id}" data-automation-id="searchBox" ${required ? 'aria-required="true"' : ''} placeholder="Search"></div>`;
+const date = (id, label, required, parts) =>
+  `<div data-automation-id="formField-${id}"><label>${label}${required ? '*' : ''}</label><div>${parts
+    .map((p) => `<input data-automation-id="dateSection${p}-input" aria-label="${p}" ${required ? 'aria-required="true"' : ''}>`).join('')}</div></div>`;
+
+const OPTIONS = {
+  state: ['Delhi', 'Karnataka', 'Maharashtra'],
+  phoneType: ['Home', 'Mobile', 'Work'],
+  degree: ["Bachelor's Degree", "Master's Degree", 'Doctorate'],
+  authorized: ['Yes', 'No'],
+  sponsorship: ['Yes', 'No'],
+  ethnicity: ['Asian (Not Hispanic or Latino)', 'White (Not Hispanic or Latino)', 'I do not wish to answer'],
+  gender: ['Male', 'Female', 'I do not wish to answer'],
+  veteran: ['I am not a protected veteran', 'I identify as one or more of the classifications of protected veteran', "I don't wish to answer"],
 };
-const options = { pt: ['Mobile', 'Landline'], gender: ['Male', 'Female', 'I do not wish to answer'] };
-const order = ['My Information', 'My Experience', 'Application Questions', 'Review'];
+const SEARCH = {
+  source: ['LinkedIn', 'Indeed', 'NVIDIA Website', 'Referral'],
+  skills: ['C++', 'Python', 'CUDA', 'Kubernetes', 'Linux', 'MPI'],
+  fieldOfStudy: ['Computer Science', 'Computer Engineering', 'Electrical Engineering'],
+};
+
+const PAGES = {
+  'My Information': () => `
+    <h2>My Information</h2>
+    ${prompt('source', 'How Did You Hear About Us?', true)}
+    <fieldset><legend>Have you previously worked for NVIDIA as an employee or contractor?*</legend>
+      <label><input type="radio" name="prev" aria-required="true"> Yes</label><label><input type="radio" name="prev"> No</label></fieldset>
+    ${select('country', 'Country', true, 'India')}
+    <h3>Legal Name</h3>
+    ${text('given', 'Given Name(s)', true)}${text('family', 'Family Name', false)}
+    ${text('localGiven', 'Local Given Name(s)', false)}${text('localFamily', 'Local Family Name', false)}
+    <label><input type="checkbox" id="preferred"> I have a preferred name</label>
+    <h3>Address</h3>
+    ${text('addr1', 'Address Line 1', false)}${text('city', 'City', false)}${text('postal', 'Postal Code', false)}${select('state', 'State', false)}
+    ${text('email', 'Email Address', false, 'someone@example.org')}
+    <h3>Phone</h3>
+    ${select('phoneType', 'Phone Device Type', true)}${prompt('phoneCode', 'Country Phone Code', true, ['India (+91)'])}
+    ${text('phone', 'Phone Number', true)}${text('ext', 'Phone Extension', false)}`,
+  'My Experience': () => `
+    <h2>My Experience</h2>
+    <h3>Work Experience</h3><div id="jobs"></div><button id="addJob">Add</button>
+    <h3>Education</h3><div id="schools"></div><button id="addSchool">Add</button>
+    <h3>Skills</h3>${prompt('skills', 'Type to Add Skills', false)}
+    <h3>Resume/CV</h3><div data-automation-id="formField-resume"><label>Upload a file (5MB max)</label>
+      <input type="file" id="resume" data-automation-id="file-upload-input-ref" style="display:none"><button id="selectFiles">Select files</button><div id="uploaded"></div></div>
+    <h3>Websites</h3><p>Add any relevant websites.</p><div id="sites"></div><button id="addSite">Add</button>
+    <h3>Social Network URLs</h3>${text('linkedin', 'Please provide a link to your LinkedIn profile:', false)}`,
+  'Application Questions': () => `
+    <h2>Application Questions</h2><p>* Indicates a required field</p>
+    ${select('authorized', 'Are you legally authorized to work in the United States?', true)}
+    <div data-automation-id="formField-sponsorship"><label id="sp-label">Will you now or in the future require sponsorship for employment visa status (e.g. H-1B visa status)?*</label>
+      <input id="sponsorship" role="combobox" aria-haspopup="listbox" readonly aria-labelledby="sp-label" aria-required="true" aria-controls="sponsorship-list" value="Select One"></div>`,
+  'Voluntary Disclosures': () => `
+    <h2>Voluntary Disclosures</h2><p>Responding is entirely voluntary.</p>
+    ${select('ethnicity', 'What is your ethnicity?', true)}${select('gender', 'What is your gender?', true)}
+    ${select('veteran', 'Do you identify as one of the following protected veterans (Disabled Veteran, Recently Separated Veteran, Active Duty Wartime or Campaign Badge Veteran, Armed Forces Service Medal Veteran)?', true)}
+    <h3>Terms and Conditions</h3><p>I accept that any information I provide will be used in accordance with NVIDIA's Applicant Privacy Policy.</p>
+    <div data-automation-id="formField-terms"><label><input type="checkbox" id="terms" aria-required="true"> By selecting the checkbox, you agree to our Terms and Conditions and Applicant Privacy Policy.*</label></div>`,
+  Review: () => `<h2>Review</h2><p>Check your answers.</p><button id="submit">Submit</button>`,
+};
+const ORDER = Object.keys(PAGES);
+
 function show(title) {
   document.getElementById('stepTitle').textContent = title;
-  document.querySelector('[data-automation-id="progressBarActiveStep"]').firstChild.textContent = 'current step ' + (order.indexOf(title) + 2) + ' of 4';
-  document.getElementById('page').innerHTML = pages[title];
+  document.querySelector('[data-automation-id="progressBarActiveStep"]').firstChild.textContent = `current step ${ORDER.indexOf(title) + 2} of 7`;
+  document.getElementById('page').innerHTML = PAGES[title]();
   document.getElementById('next').hidden = title === 'Review';
   document.getElementById('err').hidden = true;
   const submit = document.getElementById('submit');
-  if (submit) submit.onclick = () => { document.getElementById('page').innerHTML = '<h2>Thank you for applying!</h2><p>Your application has been submitted.</p>'; };
+  if (submit) submit.onclick = () => { document.getElementById('page').innerHTML = '<h2>Application Submitted</h2><p>Thank you for applying!</p>'; };
 }
-document.addEventListener('click', (e) => {
-  const button = e.target.closest('button[aria-haspopup="listbox"]');
-  if (!button) return;
+
+// Drop-downs: a button opens a list attached at the end of the page.
+function openList(owner, options, onPick) {
   document.querySelectorAll('[role=listbox]').forEach((l) => l.remove());
   const list = document.createElement('ul'); list.setAttribute('role', 'listbox');
-  for (const text of options[button.id]) {
-    const li = document.createElement('li'); li.setAttribute('role', 'option'); li.textContent = text;
-    li.addEventListener('click', () => { button.textContent = text; list.remove(); });
+  if (owner.id) list.id = owner.id + '-list';
+  for (const t of options) {
+    const li = document.createElement('li'); li.setAttribute('role', 'option'); li.textContent = t;
+    li.addEventListener('click', () => { onPick(t); list.remove(); });
     list.append(li);
   }
   document.body.append(list);
+}
+document.addEventListener('click', (e) => {
+  const button = e.target.closest('button[aria-haspopup="listbox"]');
+  if (button) openList(button, OPTIONS[button.id], (t) => (button.textContent = t));
 });
+// Newer-style drop-down: a read-only box that opens only with ArrowDown.
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' && e.target.id === 'sponsorship') openList(e.target, OPTIONS.sponsorship, (t) => (e.target.value = t));
   if (e.key === 'Escape') document.querySelectorAll('[role=listbox]').forEach((l) => l.remove());
-  if (e.key === 'Enter' && e.target.id === 'src') {
-    const list = document.createElement('ul'); list.setAttribute('role', 'listbox');
-    for (const text of ['LinkedIn', 'Indeed', 'Company Website'].filter((t) => t.toLowerCase().includes(e.target.value.toLowerCase()))) {
-      const li = document.createElement('li'); li.setAttribute('role', 'option'); li.textContent = text;
-      li.addEventListener('click', () => {
-        e.target.closest('div').querySelector('.chips').innerHTML = '<div data-automation-id="selectedItem">' + text + '</div>';
-        e.target.value = ''; list.remove();
-      });
-      list.append(li);
-    }
-    document.body.append(list);
+  // Search boxes: Enter shows matching results; picking one adds a chip.
+  if (e.key === 'Enter' && SEARCH[e.target.id]) {
+    const box = e.target;
+    const results = SEARCH[box.id].filter((t) => t.toLowerCase().includes(box.value.toLowerCase()));
+    openList(box, results.length ? results : [], (t) => {
+      const chips = box.closest('div').querySelector('.chips');
+      if (!box.dataset.multi && box.id !== 'skills') chips.innerHTML = '';
+      chips.insertAdjacentHTML('beforeend', `<div data-automation-id="selectedItem">${t}</div>`);
+      box.value = '';
+    });
   }
 });
-// Repeatable entries WITHOUT "Work Experience 1" headings (the case that broke on the real site).
+
+// Repeatable entries (no "Work Experience 1" headings, like the real page).
 let uid = 0;
-function addEntry(listId, html) {
+function addEntry(listId, html, buttonId) {
   const box = document.createElement('div'); box.className = 'entry';
   box.innerHTML = html.replace(/ID/g, 'e' + (++uid)) + '<button class="del">Delete</button>';
   setTimeout(() => document.getElementById(listId).append(box), 150);
-  document.getElementById(listId === 'jobs' ? 'addJob' : 'addSchool').textContent = 'Add Another';
+  document.getElementById(buttonId).textContent = 'Add Another';
 }
 document.addEventListener('click', (e) => {
-  if (e.target.id === 'addJob') addEntry('jobs', `
-    <div data-automation-id="formField-jobTitle"><label for="tID">Job Title*</label><input id="tID" aria-required="true"></div>
-    <div data-automation-id="formField-company"><label for="cID">Company*</label><input id="cID" aria-required="true"></div>
-    <div data-automation-id="formField-current"><label><input type="checkbox" id="curID"> I currently work here</label></div>
-    <div data-automation-id="formField-startDate"><label>From*</label>
-      <div><input data-automation-id="dateSectionMonth-input" aria-label="Month"><input data-automation-id="dateSectionYear-input" aria-label="Year"></div></div>`);
-  if (e.target.id === 'addSchool') addEntry('schools', `
-    <div data-automation-id="formField-school"><label for="sID">School or University*</label><input id="sID" aria-required="true"></div>
-    <div data-automation-id="formField-fieldOfStudy"><label for="fID">Field of Study</label><input id="fID"></div>`);
+  if (e.target.id === 'addJob') addEntry('jobs', text('tID', 'Job Title', true) + text('cID', 'Company', true) + text('lID', 'Location', false) +
+    '<label><input type="checkbox" id="curID"> I currently work here</label>' + date('fID', 'From', true, ['Month', 'Year']) + date('toID', 'To', false, ['Month', 'Year']) +
+    field('dID', 'Role Description', '<textarea id="dID"></textarea>'), 'addJob');
+  if (e.target.id === 'addSchool') addEntry('schools', text('sID', 'School or University', true) + select('degree', 'Degree', true).replace('id="degree"', 'id="degree" data-x="ID"') +
+    prompt('fieldOfStudy', 'Field of Study', false).replace(/id="fieldOfStudy"/, 'id="fieldOfStudy" data-n="ID"') + text('gID', 'Overall Result (GPA)', false) +
+    date('syID', 'From', false, ['Year']) + date('eyID', 'To (Actual or Expected)', false, ['Year']), 'addSchool');
+  if (e.target.id === 'addSite') addEntry('sites', text('uID', 'URL', true), 'addSite');
+  if (e.target.id === 'selectFiles') document.getElementById('resume').click();
 });
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'resume' && e.target.files[0]) document.getElementById('uploaded').textContent = 'Uploaded: ' + e.target.files[0].name;
+});
+
 document.getElementById('next').addEventListener('click', () => {
+  const page = document.getElementById('page');
+  const missing = [
+    ...[...page.querySelectorAll('input[aria-required=true]:not([type=radio]):not([type=checkbox]):not([data-automation-id=searchBox])')].filter((i) => !i.value || i.value === 'Select One'),
+    ...[...page.querySelectorAll('[data-automation-id=searchBox][aria-required=true]')].filter((i) => !i.closest('div').querySelector('[data-automation-id=selectedItem]')),
+    ...[...page.querySelectorAll('button[aria-required=true]')].filter((b) => b.textContent === 'Select One'),
+    ...[...page.querySelectorAll('input[type=checkbox][aria-required=true]')].filter((c) => !c.checked),
+    ...[...page.querySelectorAll('input[type=radio][aria-required=true]')].filter((r) => !page.querySelector(`input[name="${r.name}"]:checked`)),
+  ];
+  if (missing.length) {
+    const err = document.getElementById('err');
+    err.textContent = `Errors Found: ${missing.length} required field(s) missing`;
+    err.hidden = false;
+    return;
+  }
   const title = document.getElementById('stepTitle').textContent;
-  const missing = [...document.querySelectorAll('#page input[aria-required=true]')].filter((i) => !i.value && !i.closest('div').querySelector('[data-automation-id=selectedItem]')).length
-    + [...document.querySelectorAll('#page button[aria-required=true]')].filter((b) => b.textContent === 'Select One').length;
-  if (missing) { const err = document.getElementById('err'); err.textContent = missing + ' required field(s) missing'; err.hidden = false; return; }
-  setTimeout(() => show(order[order.indexOf(title) + 1]), 200);
+  setTimeout(() => show(ORDER[ORDER.indexOf(title) + 1]), 200);
 });
 show('My Information');
 </script>

@@ -15,6 +15,7 @@ export interface RepeatKind {
 }
 
 export const WORK: RepeatKind = { name: 'Work Experience', anchor: /^job title$|^position title$|^title$/i, sectionTitle: /work experience|employment/i };
+export const WEBSITES: RepeatKind = { name: 'Websites', anchor: /^url$|^website( url)?$/i, sectionTitle: /websites?/i };
 export const EDUCATION: RepeatKind = { name: 'Education', anchor: /school|university|institution/i, sectionTitle: /education/i };
 
 /** The anchor field of each entry, in page order. */
@@ -40,7 +41,7 @@ function entryBox(anchor: HTMLElement, all: HTMLElement[]): HTMLElement {
 }
 
 /** Sets field.section to e.g. "Work Experience 2" for fields inside the 2nd job's box. */
-export function labelRepeatSections(fields: FieldDescriptor[], kinds: RepeatKind[] = [WORK, EDUCATION]): void {
+export function labelRepeatSections(fields: FieldDescriptor[], kinds: RepeatKind[] = [WORK, EDUCATION, WEBSITES]): void {
   for (const kind of kinds) {
     const all = anchors(kind);
     const boxes = all.map((anchor) => entryBox(anchor, all));

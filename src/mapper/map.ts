@@ -32,7 +32,9 @@ export async function mapFields(
     }
     const rule = ruleFor(field, profile, answers);
     if (rule) {
-      decide(field, withRealOption(field, rule));
+      const { needsAi, ...decision } = withRealOption(field, rule);
+      if (needsAi) forAi.push(field);
+      else decide(field, decision);
       continue;
     }
     if (SENSITIVE_PATTERN.test(normalize(field.label))) {
@@ -59,19 +61,32 @@ export async function mapFields(
   return fields.map((field) => decisions.get(field.id)!);
 }
 
+// Other ways forms word our EEO choices.
+const ALTERNATIVE_WORDINGS: Record<string, string[]> = {
+  'I am not a veteran': ['I am not a protected veteran', 'Not a veteran', 'No'],
+  'I am a protected veteran': ['I identify as one or more of the classifications of protected veteran', 'Yes'],
+  'I am a veteran, but not a protected veteran': ['I am not a protected veteran'],
+  'Two or more races': ['Two or More Races (Not Hispanic or Latino)'],
+  'Yes, I have a disability (or had one in the past)': ['Yes, I have a disability', 'Yes'],
+  'No, I do not have a disability': ['No, I do not have a disability and have not had one in the past', 'No'],
+};
+
 /** Rule answers for choice fields must be one of the real options (Hard Rule 6). */
-function withRealOption(field: FieldDescriptor, rule: RuleResult): Omit<FieldDecision, 'fieldId' | 'label'> {
+function withRealOption(field: FieldDescriptor, rule: RuleResult): Omit<FieldDecision, 'fieldId' | 'label'> & { needsAi?: boolean } {
   const base = { ...rule, confidence: rule.confidence ?? 1 };
   if (rule.status !== 'fill' || typeof rule.value !== 'string' || field.options.length === 0) return base;
   if (!['select', 'radio'].includes(field.type)) return base;
 
+  const wanted = rule.value;
   const option =
-    rule.value === 'decline'
+    wanted === 'decline'
       ? field.options.find((o) => DECLINE_PATTERN.test(normalize(o))) ?? null
-      : matchOption(rule.value, field.options);
-  return option
-    ? { ...base, value: option }
-    : { ...base, value: null, status: 'flag', reason: `${rule.reason} — "${rule.value}" is not one of the choices` };
+      : [wanted, ...(ALTERNATIVE_WORDINGS[wanted] ?? [])].map((w) => matchOption(w, field.options)).find(Boolean) ?? null;
+  if (option) return { ...base, value: option };
+  // A profile value in different words (e.g. "CA" for "California", "M.S." for "Master's Degree"):
+  // let the AI pick the matching option. Never for Answers-tab or EEO values, which are the user's own words.
+  if (rule.source === 'rule') return { ...base, value: null, status: 'skip', reason: `${rule.reason}: "${wanted}" needs matching`, needsAi: true };
+  return { ...base, value: null, status: 'flag', reason: `${rule.reason} — "${wanted}" is not one of the choices` };
 }
 
 function fromAi(field: FieldDescriptor, answer: AiFieldAnswer | undefined, aiError: string): Omit<FieldDecision, 'fieldId' | 'label'> {
