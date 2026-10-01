@@ -213,7 +213,14 @@ If time gets short: protect the full end-to-end flow + review/confirm + EEO rule
 - [x] Assignment understood, plan made
 - [x] Name chosen: **FormPilot**
 - [x] Repo set up with WXT + React, extra packages installed, pushed to GitHub
-- [ ] **Next up: recon of the NVIDIA form (`docs/recon/`)**, then M2 (Scanner)
+- **Deadline crunch (2026-10-01): ~1 day left of a 3-day assessment.** Scope is any Workday site, tested/demoed on NVIDIA. Work in big phases, commit per phase, short explanations.
+- [x] **Phase A** — Scanner + debug tools (Scan this page, Save page snapshot); recon notes in `docs/recon/README.md`
+- [x] **Phase B** — Filler: text, native/Workday drop-downs, search boxes (nested), radio, checkbox, split dates, file upload
+- [x] **Phase C** — Mapper: label rules → one Gemini call per page → policy (prefilled kept, EEO only from Answers, consent flagged, sensitive never answered, options must be real, confidence tiers)
+- [x] **Phase D** — Orchestrator/Navigator: Fill this page / Fill all pages, Add entries for jobs/schools, pause at sign-in, stop at errors or Review, live progress in the side panel
+- [x] **Phase E (part)** — Review list + two-step "Confirm and submit" (submit only on the user's click)
+- [ ] **Next:** tune against real NVIDIA pages (user's snapshots), then docs (SETUP, ARCHITECTURE, AI_STRATEGY, LIMITATIONS), zip, demo video
+- `npm run test:e2e` runs the full flow on a fake Workday page (`tests/e2e/fake-workday.html`) in Chromium
 - [x] **M1 — resume upload and parsing**
   - [x] Step 1: side panel, options page (Gemini API key), Vitest setup
   - [x] Step 2: data shapes (zod) + storage helpers

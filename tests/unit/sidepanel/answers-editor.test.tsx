@@ -75,7 +75,7 @@ describe('AnswersEditor', () => {
       'Will you now or in the future need visa sponsorship to work there?',
       'Are you willing to relocate?',
       'Are you at least 18 years old?',
-      'Have you worked for NVIDIA before (as an employee or contractor)?',
+      'Have you worked for the company you are applying to before (as an employee or contractor)?',
     ]) {
       await click(radio(view.container, question, 'No'));
     }

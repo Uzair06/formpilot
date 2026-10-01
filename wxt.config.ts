@@ -10,6 +10,7 @@ export default defineConfig({
     // sidePanel: our main UI lives in Chrome's side panel.
     permissions: ['storage', 'sidePanel'],
     // The background worker calls the Gemini API. Nothing else is contacted.
+    // The content script also runs on Workday sites (declared in entrypoints/workday.content).
     host_permissions: ['https://generativelanguage.googleapis.com/*'],
     // An empty action gives us a toolbar icon; clicking it opens the side panel (see background.ts).
     action: { default_title: 'Open FormPilot' },

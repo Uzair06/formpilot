@@ -32,3 +32,12 @@ One line per non-obvious decision.
 - 2026-10-01 — Answers yes/no questions use Yes / No / Not answered radios. The tab badge counts the 5 yes/no questions + "How did you hear" (`countUnanswered`); notice period, salary and EEO are not counted.
 - 2026-10-01 — Question texts and EEO option labels live in `src/profile/answers.ts` so the Mapper (M4/M7) can reuse them when matching Workday's wording.
 - 2026-10-01 — "Worked here before" is worded for NVIDIA (the target form); it is one global answer, not per company.
+- 2026-10-01 — Scope widened to any Workday tenant (content script on `*.myworkdayjobs.com`, `*.myworkdaysite.com`, `*.myworkday.com`); tested on NVIDIA. Fields are found by label first; `data-automation-id` is only a hint.
+- 2026-10-01 — Scanner tags each control with `data-formpilot-id` so the Filler can find it again; skips header/nav/search areas.
+- 2026-10-01 — Workday drop-downs load options only when opened, so the orchestrator opens each empty one to read its options before mapping (needed for Hard Rule 6).
+- 2026-10-01 — Option matching (`src/shared/match-option.ts`): exact → unique prefix → unique contains → fuzzy (Fuse ≤ 0.3). Ambiguous = no match (never guess between options).
+- 2026-10-01 — Mapper: rules first; one AI call per page for the rest. EEO never goes to the AI and defaults to the page's "decline" option; consent boxes are flagged, never ticked; sensitive questions (DOB, SSN, criminal, religion, signature…) are flagged. AI answers ≥ 0.75 fill, 0.5–0.75 are suggestions, lower are skipped.
+- 2026-10-01 — Run progress lives in `chrome.storage.local` (`runState`); the side panel watches it. "Fill all pages" stops at sign-in, required fields it couldn't fill, Workday errors, or Review. Submit only runs on the side panel's two-step confirm.
+- 2026-10-01 — Page-kind detection reads `innerText` (visible text), not `textContent`, because script text on the page contains phrases like "Thank you for applying".
+- 2026-10-01 — Resume file reaches the content script as base64 via the background (`getResumeFile`), since the content script can't open the extension's IndexedDB.
+- 2026-10-01 — "Worked here before" is one company-neutral answer (was NVIDIA-specific).

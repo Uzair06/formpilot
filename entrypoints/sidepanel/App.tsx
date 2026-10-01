@@ -5,10 +5,11 @@ import type { ResumeProfile } from '@/src/profile/resume';
 import type { ResumeFile } from '@/src/profile/resume-file';
 import { clearResumeProfile, loadAnswersProfile, loadResumeProfile, saveResumeProfile } from '@/src/profile/storage';
 import AnswersEditor from './answers/AnswersEditor';
+import AutofillPanel from './autofill/AutofillPanel';
 import ProfileSection, { type ParseState } from './ProfileSection';
 import ResumeUpload from './ResumeUpload';
 
-type Tab = 'resume' | 'answers';
+type Tab = 'autofill' | 'resume' | 'answers';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('resume');
@@ -57,6 +58,9 @@ export default function App() {
       </header>
 
       <nav className="tabs" role="tablist">
+        <TabButton id="autofill" current={tab} onSelect={setTab}>
+          Autofill
+        </TabButton>
         <TabButton id="resume" current={tab} onSelect={setTab}>
           Resume
         </TabButton>
@@ -66,6 +70,10 @@ export default function App() {
       </nav>
 
       {/* Both tabs stay mounted and are only hidden, so switching tabs never loses typing in progress. */}
+      <div role="tabpanel" id="panel-autofill" aria-labelledby="tab-autofill" hidden={tab !== 'autofill'}>
+        <AutofillPanel />
+      </div>
+
       <div role="tabpanel" id="panel-resume" aria-labelledby="tab-resume" hidden={tab !== 'resume'}>
         <ResumeUpload
           onResumeReady={buildProfile}

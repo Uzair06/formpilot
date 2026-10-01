@@ -67,8 +67,8 @@ export const YES_NO_QUESTIONS: ReadonlyArray<{ key: YesNoKey; question: string; 
   { key: 'over18', question: 'Are you at least 18 years old?' },
   {
     key: 'previouslyWorkedAtCompany',
-    question: 'Have you worked for NVIDIA before (as an employee or contractor)?',
-    hint: 'Used for the NVIDIA form. Change it if you apply to another company.',
+    question: 'Have you worked for the company you are applying to before (as an employee or contractor)?',
+    hint: 'One answer for all applications. Change it before applying to a company you worked for.',
   },
 ];
 

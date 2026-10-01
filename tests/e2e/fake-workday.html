@@ -1,0 +1,83 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Fake Workday</title></head>
+<body>
+<header><input aria-label="Search" data-automation-id="keywordSearchInput"></header>
+<main>
+  <div data-automation-id="progressBarActiveStep">current step 2 of 4<span id="stepTitle">My Information</span></div>
+  <div id="page"></div>
+  <div role="alert" id="err" hidden></div>
+  <button data-automation-id="pageFooterNextButton" id="next">Save and Continue</button>
+</main>
+<script>
+// A tiny imitation of Workday widgets, for testing FormPilot end to end. Not real Workday code.
+const pages = {
+  'My Information': `
+    <h2>My Information</h2>
+    <div data-automation-id="formField-firstName"><label for="fn">Given Name(s)*</label><input id="fn" aria-required="true"></div>
+    <div data-automation-id="formField-lastName"><label for="ln">Family Name*</label><input id="ln" aria-required="true"></div>
+    <div data-automation-id="formField-email"><label for="em">Email Address</label><input id="em" type="email"></div>
+    <div data-automation-id="formField-phoneType"><label id="ptl">Phone Device Type*</label>
+      <button id="pt" aria-haspopup="listbox" aria-labelledby="ptl" aria-required="true">Select One</button></div>
+    <div data-automation-id="formField-phone"><label for="ph">Phone Number*</label><input id="ph" aria-required="true"></div>
+    <div data-automation-id="formField-source"><label for="src">How Did You Hear About Us?*</label><div class="chips"></div>
+      <input id="src" data-automation-id="searchBox" aria-required="true"></div>`,
+  'Application Questions': `
+    <h2>Application Questions</h2>
+    <fieldset><legend>Are you legally authorized to work in the United States?*</legend>
+      <label><input type="radio" name="q1"> Yes</label><label><input type="radio" name="q1"> No</label></fieldset>
+    <fieldset><legend>Will you now or in the future require visa sponsorship?*</legend>
+      <label><input type="radio" name="q2"> Yes</label><label><input type="radio" name="q2"> No</label></fieldset>
+    <div data-automation-id="formField-available"><label>Available start date</label>
+      <div><input data-automation-id="dateSectionMonth-input" aria-label="Month"><input data-automation-id="dateSectionYear-input" aria-label="Year"></div></div>
+    <label><input type="checkbox" id="agree"> I agree to the terms and conditions</label>
+    <div data-automation-id="formField-gender"><label id="gl">Gender</label><button id="gender" aria-haspopup="listbox" aria-labelledby="gl">Select One</button></div>`,
+  'Review': `<h2>Review</h2><p>Check your answers.</p><button id="submit">Submit</button>`,
+};
+const options = { pt: ['Mobile', 'Landline'], gender: ['Male', 'Female', 'I do not wish to answer'] };
+const order = ['My Information', 'Application Questions', 'Review'];
+function show(title) {
+  document.getElementById('stepTitle').textContent = title;
+  document.querySelector('[data-automation-id="progressBarActiveStep"]').firstChild.textContent = 'current step ' + (order.indexOf(title) + 2) + ' of 4';
+  document.getElementById('page').innerHTML = pages[title];
+  document.getElementById('next').hidden = title === 'Review';
+  document.getElementById('err').hidden = true;
+  const submit = document.getElementById('submit');
+  if (submit) submit.onclick = () => { document.getElementById('page').innerHTML = '<h2>Thank you for applying!</h2><p>Your application has been submitted.</p>'; };
+}
+document.addEventListener('click', (e) => {
+  const button = e.target.closest('button[aria-haspopup="listbox"]');
+  if (!button) return;
+  document.querySelectorAll('[role=listbox]').forEach((l) => l.remove());
+  const list = document.createElement('ul'); list.setAttribute('role', 'listbox');
+  for (const text of options[button.id]) {
+    const li = document.createElement('li'); li.setAttribute('role', 'option'); li.textContent = text;
+    li.addEventListener('click', () => { button.textContent = text; list.remove(); });
+    list.append(li);
+  }
+  document.body.append(list);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') document.querySelectorAll('[role=listbox]').forEach((l) => l.remove());
+  if (e.key === 'Enter' && e.target.id === 'src') {
+    const list = document.createElement('ul'); list.setAttribute('role', 'listbox');
+    for (const text of ['LinkedIn', 'Indeed', 'Company Website'].filter((t) => t.toLowerCase().includes(e.target.value.toLowerCase()))) {
+      const li = document.createElement('li'); li.setAttribute('role', 'option'); li.textContent = text;
+      li.addEventListener('click', () => {
+        e.target.closest('div').querySelector('.chips').innerHTML = '<div data-automation-id="selectedItem">' + text + '</div>';
+        e.target.value = ''; list.remove();
+      });
+      list.append(li);
+    }
+    document.body.append(list);
+  }
+});
+document.getElementById('next').addEventListener('click', () => {
+  const title = document.getElementById('stepTitle').textContent;
+  const missing = [...document.querySelectorAll('#page input[aria-required=true]')].filter((i) => !i.value && !i.closest('div').querySelector('[data-automation-id=selectedItem]')).length
+    + [...document.querySelectorAll('#page button[aria-required=true]')].filter((b) => b.textContent === 'Select One').length;
+  if (missing) { const err = document.getElementById('err'); err.textContent = missing + ' required field(s) missing'; err.hidden = false; return; }
+  setTimeout(() => show(order[order.indexOf(title) + 1]), 200);
+});
+show('My Information');
+</script>
+</body></html>

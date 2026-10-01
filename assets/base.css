@@ -329,3 +329,80 @@ fieldset.radio-group legend {
   border-radius: 6px;
   padding: 6px 8px;
 }
+
+.fields-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.fields-table th,
+.fields-table td {
+  text-align: left;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+/* --- autofill --- */
+
+.row.wrap {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+h3 {
+  font-size: 14px;
+  margin: 14px 0 6px;
+}
+
+.run-status.needs_user,
+.run-status.awaiting_auth,
+.run-status.error {
+  border-color: var(--error);
+}
+
+.run-status.review,
+.run-status.done {
+  border-color: var(--ok);
+}
+
+.run-status p {
+  margin: 0 0 4px;
+}
+
+.report {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 8px;
+  font-size: 12px;
+}
+
+.report li {
+  display: grid;
+  grid-template-columns: 40% 60%;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-value {
+  overflow-wrap: anywhere;
+}
+
+.report-filled .report-value {
+  color: var(--ok);
+}
+
+.report-attention .report-value {
+  color: var(--error);
+}
+
+.report-quiet {
+  color: var(--muted);
+}
+
+details.debug {
+  margin-top: 16px;
+  color: var(--muted);
+}

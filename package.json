@@ -15,7 +15,8 @@
     "postinstall": "wxt prepare",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:live": "FORMPILOT_LIVE=1 vitest run"
+    "test:live": "FORMPILOT_LIVE=1 vitest run",
+    "test:e2e": "wxt build && node tests/e2e/run-fake-workday.mjs"
   },
   "dependencies": {
     "fuse.js": "^7.5.0",
