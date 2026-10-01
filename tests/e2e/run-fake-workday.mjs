@@ -63,6 +63,12 @@ try {
   check(fields['Given Name(s)']?.shownValue === 'Alex', 'fills text boxes');
   check(fields['Phone Device Type']?.shownValue === 'Mobile', 'fills a Workday-style drop-down');
   check(fields['How Did You Hear About Us?']?.outcome === 'filled', 'fills a search-as-you-type box');
+  const page2 = run.pages.find((p) => p.page.title === 'My Experience');
+  const filled = (label) => (page2?.fields ?? []).filter((f) => f.label === label && f.outcome === 'filled').map((f) => f.shownValue);
+  check(JSON.stringify(filled('Job Title')) === JSON.stringify(['Senior Software Engineer', 'Software Engineer']), `adds and fills one entry per job (${JSON.stringify(filled('Job Title'))})`);
+  check(JSON.stringify(filled('Company')) === JSON.stringify(['Example Compute Inc.', 'Sample Storage Systems']), 'fills each job with its own company');
+  check(JSON.stringify(filled('From')) === JSON.stringify(['03/2022', '06/2019']), `fills split month/year dates (${JSON.stringify(filled('From'))})`);
+  check(JSON.stringify(filled('School or University')) === JSON.stringify(['University of Example', 'Sample State University']), 'adds and fills one entry per school');
   check(fields['Are you legally authorized to work in the United States?']?.shownValue === 'Yes', 'answers yes/no from the Answers tab');
   check(fields['Gender']?.shownValue === 'I do not wish to answer', 'declines EEO by default');
   check(fields['I agree to the terms and conditions']?.status === 'flag', 'flags the consent box');

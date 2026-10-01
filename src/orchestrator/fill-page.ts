@@ -9,6 +9,7 @@ import { scanPage } from '@/src/scanner/scan';
 import { pageInfo } from '@/src/scanner/snapshot';
 import type { FieldDescriptor } from '@/src/scanner/types';
 import { waitFor, waitForQuiet } from '@/src/shared/wait';
+import { EDUCATION, ensureEntries, labelRepeatSections, WORK } from './repeat-sections';
 import { recordPage, runState, updateRun, type FieldReport, type PageReport } from './run-state';
 
 // The Orchestrator: fills one page, or walks through all pages until Review.
@@ -27,13 +28,15 @@ export async function fillCurrentPage(): Promise<PageReport> {
   const answers = await loadAnswersProfile();
 
   // Repeatable sections: make sure there is one entry per job / school.
-  await ensureEntries(/work experience/i, profile.workExperience.length);
-  await ensureEntries(/education/i, profile.education.length);
+  await ensureEntries(WORK, profile.workExperience.length);
+  await ensureEntries(EDUCATION, profile.education.length);
 
   const reports = new Map<string, FieldReport>();
   for (let pass = 0; pass < MAX_PASSES; pass++) {
     if ((await runState.getValue()).stopRequested) break;
-    const fields = scanPage().filter((f) => !reports.has(f.id));
+    const scanned = scanPage();
+    labelRepeatSections(scanned); // "Work Experience 2" etc., from the page structure
+    const fields = scanned.filter((f) => !reports.has(f.id));
     if (fields.length === 0) break;
 
     // Workday drop-downs only show their choices when opened: read them so answers can be checked.
@@ -92,38 +95,6 @@ async function uploadResume(field: FieldDescriptor): Promise<FillOutcome> {
   if (container.textContent?.includes(name)) return { ok: true, value: name }; // already uploaded
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
   return fillField(field, name, new File([bytes], name, { type: mimeType }));
-}
-
-/** Clicks "Add" in a repeatable section (Work Experience, Education) until there are `wanted` entries. */
-async function ensureEntries(section: RegExp, wanted: number): Promise<void> {
-  const headings = () => deepQueryAll(document, 'h2, h3, h4, [role="heading"]').filter((h) => isVisible(h));
-  const sectionHeading = () => headings().find((h) => section.test(cleanText(h.textContent)) && !/\d\s*$/.test(cleanText(h.textContent)));
-  const entryCount = () => headings().filter((h) => new RegExp(`${section.source}\\s*\\d+\\s*$`, 'i').test(cleanText(h.textContent))).length;
-
-  for (let attempt = 0; attempt < 10 && entryCount() < wanted; attempt++) {
-    const start = sectionHeading();
-    if (!start) return; // this page has no such section
-    const addButton = addButtonAfter(start, headings());
-    if (!addButton) return;
-    const before = entryCount();
-    realClick(addButton);
-    await waitFor(() => entryCount() > before, { what: 'a new entry', timeoutMs: 5_000 }).catch(() => null);
-  }
-}
-
-/** The "Add" / "Add Another" button between a section heading and the next top-level section. */
-function addButtonAfter(heading: Element, allHeadings: Element[]): HTMLElement | null {
-  const level = heading.tagName;
-  const nextSection = allHeadings.find(
-    (h) => h !== heading && h.tagName === level && heading.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING && !/\d\s*$/.test(cleanText(h.textContent)),
-  );
-  const buttons = deepQueryAll<HTMLElement>(document, 'button, [role="button"]').filter((b) => {
-    if (!isVisible(b) || !/^add( another)?\b/i.test(cleanText(b.textContent || b.getAttribute('aria-label')))) return false;
-    const afterHeading = heading.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
-    const beforeNext = !nextSection || b.compareDocumentPosition(nextSection) & Node.DOCUMENT_POSITION_FOLLOWING;
-    return afterHeading && beforeNext;
-  });
-  return buttons.at(-1) ?? null;
 }
 
 /** Waits until a freshly loaded Workday page has drawn its content (it renders after load). */

@@ -21,6 +21,10 @@ const pages = {
     <div data-automation-id="formField-phone"><label for="ph">Phone Number*</label><input id="ph" aria-required="true"></div>
     <div data-automation-id="formField-source"><label for="src">How Did You Hear About Us?*</label><div class="chips"></div>
       <input id="src" data-automation-id="searchBox" aria-required="true"></div>`,
+  'My Experience': `
+    <h2>My Experience</h2>
+    <h3>Work Experience</h3><div id="jobs"></div><button aria-label="Add Work Experience" id="addJob">Add</button>
+    <h3>Education</h3><div id="schools"></div><button aria-label="Add Education" id="addSchool">Add</button>`,
   'Application Questions': `
     <h2>Application Questions</h2>
     <fieldset><legend>Are you legally authorized to work in the United States?*</legend>
@@ -34,7 +38,7 @@ const pages = {
   'Review': `<h2>Review</h2><p>Check your answers.</p><button id="submit">Submit</button>`,
 };
 const options = { pt: ['Mobile', 'Landline'], gender: ['Male', 'Female', 'I do not wish to answer'] };
-const order = ['My Information', 'Application Questions', 'Review'];
+const order = ['My Information', 'My Experience', 'Application Questions', 'Review'];
 function show(title) {
   document.getElementById('stepTitle').textContent = title;
   document.querySelector('[data-automation-id="progressBarActiveStep"]').firstChild.textContent = 'current step ' + (order.indexOf(title) + 2) + ' of 4';
@@ -70,6 +74,25 @@ document.addEventListener('keydown', (e) => {
     }
     document.body.append(list);
   }
+});
+// Repeatable entries WITHOUT "Work Experience 1" headings (the case that broke on the real site).
+let uid = 0;
+function addEntry(listId, html) {
+  const box = document.createElement('div'); box.className = 'entry';
+  box.innerHTML = html.replace(/ID/g, 'e' + (++uid)) + '<button class="del">Delete</button>';
+  setTimeout(() => document.getElementById(listId).append(box), 150);
+  document.getElementById(listId === 'jobs' ? 'addJob' : 'addSchool').textContent = 'Add Another';
+}
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'addJob') addEntry('jobs', `
+    <div data-automation-id="formField-jobTitle"><label for="tID">Job Title*</label><input id="tID" aria-required="true"></div>
+    <div data-automation-id="formField-company"><label for="cID">Company*</label><input id="cID" aria-required="true"></div>
+    <div data-automation-id="formField-current"><label><input type="checkbox" id="curID"> I currently work here</label></div>
+    <div data-automation-id="formField-startDate"><label>From*</label>
+      <div><input data-automation-id="dateSectionMonth-input" aria-label="Month"><input data-automation-id="dateSectionYear-input" aria-label="Year"></div></div>`);
+  if (e.target.id === 'addSchool') addEntry('schools', `
+    <div data-automation-id="formField-school"><label for="sID">School or University*</label><input id="sID" aria-required="true"></div>
+    <div data-automation-id="formField-fieldOfStudy"><label for="fID">Field of Study</label><input id="fID"></div>`);
 });
 document.getElementById('next').addEventListener('click', () => {
   const title = document.getElementById('stepTitle').textContent;
