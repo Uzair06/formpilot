@@ -94,7 +94,7 @@ try {
   // --- Run until it needs the user (the Terms checkbox on Voluntary Disclosures) ---
   await ask('runAll');
   const stop = await waitRun(['running', 'idle']);
-  check(stop.status === 'needs_user' && /Voluntary Disclosures/.test(stop.message), `runs through to the Terms checkbox (${stop.status}: ${stop.message})`);
+  check(stop.status === 'needs_user' && /Voluntary Disclosures/.test(stop.message) && /Terms and Conditions/.test(stop.message), `runs through to the Terms checkbox (${stop.status}: ${stop.message})`);
 
   const info = report(stop, 'My Information');
   check(one(info, 'How Did You Hear About Us?')?.shownValue === 'LinkedIn', 'How Did You Hear About Us → LinkedIn');
@@ -117,8 +117,9 @@ try {
   check(JSON.stringify(shown(exp, 'To')).includes('02/2022'), 'end date only for the past job');
   check(JSON.stringify(shown(exp, 'School or University')) === '["University of Example","Sample State University"]', 'one entry per school');
   check(JSON.stringify(shown(exp, 'Degree')) === `["Master's Degree","Bachelor's Degree"]`, `degree chosen by AI from real options (${JSON.stringify(shown(exp, 'Degree'))})`);
-  check(shown(exp, 'Field of Study').length === 2, 'field of study picked from search');
-  check((shown(exp, 'Type to Add Skills')[0] ?? '').includes('CUDA'), `skills added (${shown(exp, 'Type to Add Skills')[0]})`);
+  check(JSON.stringify(shown(exp, 'Field of Study')) === '["Computer Science","Computer Engineering"]', `field of study picked from a long scrolling list (${JSON.stringify(shown(exp, 'Field of Study'))})`);
+  check(shown(exp, 'Type to Add Skills')[0] === 'C++, Python, CUDA, MPI, Kubernetes, Linux', `several skills typed and picked (${shown(exp, 'Type to Add Skills')[0]})`);
+  check(!/No fields found|did not change|errors/.test(stop.message), 'moved from page to page by itself (slow load + "Saving…" message)');
   check(one(exp, '')?.outcome === 'filled' || exp.some((f) => f.reason === 'Your resume file' && f.outcome === 'filled'), 'resume file uploaded');
   check(JSON.stringify(shown(exp, 'URL')) === '["https://github.com/alex-rivera-example","https://alexrivera.example.com"]', `websites added (${JSON.stringify(shown(exp, 'URL'))})`);
   check(one(exp, 'Please provide a link to your LinkedIn profile:')?.shownValue === 'https://www.linkedin.com/in/alex-rivera-example', 'LinkedIn filled');

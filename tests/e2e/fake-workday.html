@@ -19,7 +19,16 @@ const select = (id, label, required, value = 'Select One') =>
 const prompt = (id, label, required, chips = []) =>
   `<div data-automation-id="formField-${id}"><label for="${id}">${label}${required ? '*' : ''}</label>
      <div class="chips">${chips.map((c) => `<div data-automation-id="selectedItem">${c}</div>`).join('')}</div>
+     <span class="count">${chips.length} item${chips.length === 1 ? '' : 's'} selected${chips.length ? ', ' + chips.join(', ') : ''}</span>
      <input id="${id}" data-automation-id="searchBox" ${required ? 'aria-required="true"' : ''} placeholder="Search"></div>`;
+function addChip(box, t, multi) {
+  const wrap = box.closest('div');
+  const chips = wrap.querySelector('.chips');
+  if (!multi) chips.innerHTML = '';
+  chips.insertAdjacentHTML('beforeend', `<div data-automation-id="selectedItem">${t}</div>`);
+  const all = [...chips.children].map((c) => c.textContent);
+  wrap.querySelector('.count').textContent = `${all.length} item${all.length === 1 ? '' : 's'} selected, ${all.join(', ')}`;
+}
 const date = (id, label, required, parts) =>
   `<div data-automation-id="formField-${id}"><label>${label}${required ? '*' : ''}</label><div>${parts
     .map((p) => `<input data-automation-id="dateSection${p}-input" aria-label="${p}" ${required ? 'aria-required="true"' : ''}>`).join('')}</div></div>`;
@@ -37,8 +46,14 @@ const OPTIONS = {
 const SEARCH = {
   source: ['LinkedIn', 'Indeed', 'NVIDIA Website', 'Referral'],
   skills: ['C++', 'Python', 'CUDA', 'Kubernetes', 'Linux', 'MPI'],
-  fieldOfStudy: ['Computer Science', 'Computer Engineering', 'Electrical Engineering'],
 };
+// Field of Study: a long list you scroll through; no search. Only the options in view are drawn (like Workday).
+const FIELDS_OF_STUDY = ['Accounting', 'Aerospace Engineering', 'Anthropology', 'Applied Mathematics', 'Architecture', 'Art History',
+  'Astronomy', 'Biochemistry', 'Biology', 'Business Administration', 'Chemical Engineering', 'Chemistry', 'Civil Engineering',
+  'Cognitive Science', 'Communications', 'Computer Engineering', 'Computer Science', 'Data Science', 'Economics', 'Education',
+  'Electrical Engineering', 'English', 'Environmental Science', 'Finance', 'Geology', 'History', 'Industrial Engineering',
+  'Information Systems', 'Journalism', 'Law', 'Linguistics', 'Marketing', 'Materials Science', 'Mathematics', 'Mechanical Engineering',
+  'Music', 'Neuroscience', 'Nursing', 'Philosophy', 'Physics', 'Political Science', 'Psychology', 'Sociology', 'Statistics'];
 
 const PAGES = {
   'My Information': () => `
@@ -111,18 +126,50 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown' && e.target.id === 'sponsorship') openList(e.target, OPTIONS.sponsorship, (t) => (e.target.value = t));
   if (e.key === 'Escape') document.querySelectorAll('[role=listbox]').forEach((l) => l.remove());
-  // Search boxes: Enter shows matching results; picking one adds a chip.
-  if (e.key === 'Enter' && SEARCH[e.target.id]) {
-    const box = e.target;
-    const results = SEARCH[box.id].filter((t) => t.toLowerCase().includes(box.value.toLowerCase()));
-    openList(box, results.length ? results : [], (t) => {
-      const chips = box.closest('div').querySelector('.chips');
-      if (!box.dataset.multi && box.id !== 'skills') chips.innerHTML = '';
-      chips.insertAdjacentHTML('beforeend', `<div data-automation-id="selectedItem">${t}</div>`);
-      box.value = '';
-    });
-  }
+  if (e.key === 'Enter' && SEARCH[e.target.id]) showSuggestions(e.target);
+  if ((e.key === 'ArrowDown' || e.key === 'Enter') && e.target.id === 'fieldOfStudy') openStudyList(e.target);
 });
+// Search boxes: suggestions appear shortly after typing (no Enter needed). Skills is multi-select.
+let typingTimer;
+document.addEventListener('input', (e) => {
+  if (!SEARCH[e.target.id]) return;
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => showSuggestions(e.target), 300);
+});
+function showSuggestions(box) {
+  if (!box.value) return;
+  const results = SEARCH[box.id].filter((t) => t.toLowerCase().includes(box.value.toLowerCase()));
+  if (!results.length) return document.querySelectorAll('[role=listbox]').forEach((l) => l.remove());
+  openList(box, results, (t) => { addChip(box, t, box.id === 'skills'); box.value = ''; });
+}
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'fieldOfStudy') openStudyList(e.target);
+});
+function openStudyList(box) {
+  document.querySelectorAll('[role=listbox]').forEach((l) => l.remove());
+  const list = document.createElement('div');
+  list.setAttribute('role', 'listbox');
+  list.style.cssText = 'position:fixed;top:40px;left:40px;width:300px;height:160px;overflow-y:auto;background:#fff;border:1px solid #888';
+  const ROW = 20;
+  const inner = document.createElement('div');
+  inner.style.cssText = `position:relative;height:${FIELDS_OF_STUDY.length * ROW}px`;
+  list.append(inner);
+  const draw = () => {
+    const first = Math.floor(list.scrollTop / ROW);
+    inner.innerHTML = '';
+    FIELDS_OF_STUDY.slice(first, first + 9).forEach((t, i) => {
+      const o = document.createElement('div');
+      o.setAttribute('role', 'option');
+      o.textContent = t;
+      o.style.cssText = `position:absolute;top:${(first + i) * ROW}px;height:${ROW}px`;
+      o.addEventListener('click', () => { addChip(box, t, false); list.remove(); });
+      inner.append(o);
+    });
+  };
+  list.addEventListener('scroll', draw);
+  document.body.append(list);
+  draw();
+}
 
 // Repeatable entries (no "Work Experience 1" headings, like the real page).
 let uid = 0;
@@ -162,7 +209,11 @@ document.getElementById('next').addEventListener('click', () => {
     return;
   }
   const title = document.getElementById('stepTitle').textContent;
-  setTimeout(() => show(ORDER[ORDER.indexOf(title) + 1]), 200);
+  const err = document.getElementById('err');
+  err.textContent = 'Saving…'; err.hidden = false;
+  setTimeout(() => { err.hidden = true; }, 400);
+  document.getElementById('page').innerHTML = '<div data-automation-id="loadingSpinner" aria-busy="true">Loading…</div>';
+  setTimeout(() => show(ORDER[ORDER.indexOf(title) + 1]), title === 'My Information' ? 2500 : 600);
 });
 show('My Information');
 </script>

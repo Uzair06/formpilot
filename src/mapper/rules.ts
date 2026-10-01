@@ -41,7 +41,7 @@ export function ruleFor(field: FieldDescriptor, profile: ResumeProfile, answers:
   const fill = (value: string | string[] | null | undefined, reason: string, source: RuleResult['source'] = 'rule'): RuleResult =>
     value && (typeof value === 'string' ? value.trim() : value.length)
       ? { value, source, reason, status: 'fill', confidence: 1 }
-      : { value: null, source, reason: `${reason}: nothing saved in your profile`, status: 'skip' };
+      : { value: null, source, reason: `${reason}: not in your ${source === 'answers' ? 'Answers tab' : 'resume'}`, status: 'skip' };
 
   // --- safety first ---
   if (field.type === 'checkbox' && has(label, CONSENT_PATTERN)) {

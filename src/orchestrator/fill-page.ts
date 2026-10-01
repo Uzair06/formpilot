@@ -2,7 +2,7 @@ import { elementFor, fillField, readDropdownOptions, type FillOutcome } from '@/
 import { realClick } from '@/src/filler/events';
 import { mapFields } from '@/src/mapper/map';
 import { sendToBackground } from '@/src/messaging/messages';
-import { detectPageKind, findNextButton, findStartButton, goToNextPage, visibleErrors } from '@/src/navigator/page';
+import { detectPageKind, findStartButton, goToNextPage, pageReady, visibleErrors } from '@/src/navigator/page';
 import { loadAnswersProfile, loadResumeProfile } from '@/src/profile/storage';
 import { cleanText, deepQueryAll, isVisible } from '@/src/scanner/dom';
 import { scanPage } from '@/src/scanner/scan';
@@ -99,12 +99,6 @@ async function uploadResume(field: FieldDescriptor): Promise<FillOutcome> {
   return fillField(field, name, new File([bytes], name, { type: mimeType }));
 }
 
-/** Waits until a freshly loaded Workday page has drawn its content (it renders after load). */
-async function pageReady(): Promise<void> {
-  await waitFor(() => detectPageKind() !== 'form' || scanPage().length > 0 || findNextButton(), { what: 'the page to load', timeoutMs: 20_000 }).catch(() => null);
-  await waitForQuiet({ quietMs: 500, timeoutMs: 5_000 });
-}
-
 const RESUME_WINDOW_MS = 10 * 60_000;
 
 /**
@@ -157,14 +151,20 @@ export async function runAllPages({ resumed = false } = {}): Promise<void> {
       return;
     }
 
+    await pageReady();
     await updateRun({ message: `Filling "${pageInfo().title}"…` });
     const report = await fillCurrentPage();
-    const needsUser = report.fields.filter((f) => f.status === 'flag' || f.outcome === 'failed');
+    if (report.fields.length === 0) {
+      // Never press Next on a page we couldn't read: that only produces Workday errors.
+      await updateRun({ status: 'needs_user', message: `No fields found on "${report.page.title}" yet. If the page is still loading, wait a moment and press Continue.` });
+      return;
+    }
+    const needsUser = report.fields.filter((f) => f.status === 'flag' || (f.status === 'suggest' && !f.outcome) || f.outcome === 'failed');
     const requiredMissing = needsUser.filter((f) => scanPage().some((s) => s.id === f.fieldId && s.required && !s.currentValue));
     if (requiredMissing.length > 0) {
       await updateRun({
         status: 'needs_user',
-        message: `Please fill ${requiredMissing.length} required field(s) on "${report.page.title}" yourself, then press "Fill all pages" again.`,
+        message: `Please answer on "${report.page.title}": ${requiredMissing.map((f) => (f.label || 'an unlabelled field').replace(/[.:]+$/, '')).join('; ')}. Then press Continue.`,
       });
       return;
     }
@@ -172,10 +172,10 @@ export async function runAllPages({ resumed = false } = {}): Promise<void> {
     await updateRun({ message: `Going to the next page…` });
     const moved = await goToNextPage();
     if (!moved.moved) {
-      await updateRun({ status: 'needs_user', message: `${moved.reason} ${moved.errors.join(' · ')}`.trim() });
+      await updateRun({ status: 'needs_user', message: `${moved.reason} ${moved.errors.join(' · ')} Fix it on the page, then press Continue.`.trim() });
       return;
     }
-    await waitForQuiet({ quietMs: 500, timeoutMs: 10_000 });
+    await pageReady();
   }
   await updateRun({ status: 'needs_user', message: 'Stopped after many pages without reaching Review.' });
 }

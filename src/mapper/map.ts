@@ -58,7 +58,14 @@ export async function mapFields(
     }
   }
 
-  return fields.map((field) => decisions.get(field.id)!);
+  // A required field we can't fill must not slip by quietly: show it as "needs you".
+  return fields.map((field) => {
+    const decision = decisions.get(field.id)!;
+    if (field.required && !field.currentValue && decision.status === 'skip') {
+      return { ...decision, status: 'flag', reason: `Required — ${decision.reason}. Please answer it on the page.` };
+    }
+    return decision;
+  });
 }
 
 // Other ways forms word our EEO choices.

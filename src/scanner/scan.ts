@@ -166,7 +166,9 @@ export function scanPage(root: ParentNode = formRoot()): FieldDescriptor[] {
       const chips = [...(container?.querySelectorAll('[data-automation-id="selectedItem"], [role="listitem"]') ?? [])]
         .map((chip) => cleanText(chip.textContent))
         .filter(Boolean);
-      add(element, 'prompt', { currentValue: chips.join(', ') || input.value });
+      // Workday also says e.g. "1 item selected, India (+91)" ("0 items selected" when empty).
+      const counter = cleanText(container?.textContent).match(/\b([1-9]\d*) items? selected,?\s*([^]*)$/i);
+      add(element, 'prompt', { currentValue: chips.join(', ') || (counter ? counter[2]!.trim() || `${counter[1]} selected` : '') || input.value });
       continue;
     }
 

@@ -97,6 +97,18 @@ describe('mapFields', () => {
     expect(decisions.map((d) => [d.value, d.status])).toEqual([['6', 'fill'], ["Master's Degree", 'fill'], ['I build storage systems.', 'suggest'], [null, 'skip']]);
   });
 
+  it('marks required questions it cannot answer as needing the user', async () => {
+    const a = answers();
+    a.howDidYouHear = '';
+    const [heard, optional] = await mapFields(
+      [field('How Did You Hear About Us?', { type: 'prompt', required: true }), field('Phone Extension')],
+      PROFILE, a, noAi,
+    );
+    expect(heard).toMatchObject({ status: 'flag' });
+    expect(heard!.reason).toContain('Required');
+    expect(optional).toMatchObject({ status: 'skip' });
+  });
+
   it('keeps going when the AI is unavailable', async () => {
     const decisions = await mapFields([field('Given Name'), field('Favourite GPU?')], PROFILE, answers(), async () => {
       throw new Error('Gemini is busy');

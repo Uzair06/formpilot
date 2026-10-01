@@ -1,6 +1,7 @@
 import { cleanText, deepQueryAll, isVisible } from '@/src/scanner/dom';
 import { pageInfo } from '@/src/scanner/snapshot';
-import { waitFor } from '@/src/shared/wait';
+import { scanPage } from '@/src/scanner/scan';
+import { waitFor, waitForQuiet } from '@/src/shared/wait';
 import { realClick } from '@/src/filler/events';
 
 // Knows where we are in the Workday flow and how to move forward.
@@ -57,23 +58,47 @@ export function visibleErrors(): string[] {
   return [...new Set(nodes.filter((n) => isVisible(n)).map((n) => cleanText(n.textContent)).filter(Boolean))].slice(0, 10);
 }
 
+/** Loading indicators Workday shows while a step is being fetched or saved. */
+function isLoading(): boolean {
+  return deepQueryAll(document, '[aria-busy="true"], [data-automation-id*="spinner" i], [data-automation-id*="loading" i], [role="progressbar"]:not([data-automation-id*="progressBar" i])')
+    .some((el) => isVisible(el));
+}
+
+/**
+ * Waits until a Workday step has really drawn its content: no loading indicator, and either
+ * form fields, a Next/Submit button, or a sign-in/job page. Workday renders steps after a delay.
+ */
+export async function pageReady(timeoutMs = 25_000): Promise<void> {
+  await waitFor(
+    () => !isLoading() && (scanPage().length > 0 || findSubmitButton() || detectPageKind() !== 'form'),
+    { what: 'the page to load', timeoutMs },
+  ).catch(() => null);
+  await waitForQuiet({ quietMs: 600, timeoutMs: 6_000 });
+}
+
 export type AdvanceResult = { moved: true } | { moved: false; errors: string[]; reason: string };
 
-/** Clicks Next and waits until the step changes, or errors appear. */
+/** Clicks Next and waits until the step changes. Errors count only if they are new and stay. */
 export async function goToNextPage(): Promise<AdvanceResult> {
   const next = findNextButton();
   if (!next) return { moved: false, errors: [], reason: 'No Next / Save and Continue button found on this page.' };
   const before = pageInfo();
+  const oldErrors = new Set(visibleErrors());
+  const newErrors = () => visibleErrors().filter((e) => !oldErrors.has(e));
+  const moved = () => {
+    const now = pageInfo();
+    return now.title !== before.title || now.step !== before.step || now.url !== before.url;
+  };
+
   realClick(next);
-  const outcome = await waitFor(
-    () => {
-      const now = pageInfo();
-      if (now.title !== before.title || now.step !== before.step || now.url !== before.url) return 'moved';
-      if (visibleErrors().length > 0) return 'errors';
-      return null;
-    },
-    { what: 'the next page', timeoutMs: 20_000 },
-  ).catch(() => 'timeout' as const);
+  const outcome = await waitFor(() => (moved() ? 'moved' : newErrors().length > 0 ? 'errors' : null), { what: 'the next page', timeoutMs: 30_000 }).catch(
+    () => 'timeout' as const,
+  );
   if (outcome === 'moved') return { moved: true };
-  return { moved: false, errors: visibleErrors(), reason: outcome === 'errors' ? 'Workday shows errors on this page.' : 'The page did not change after clicking Next.' };
+  if (outcome === 'errors') {
+    // Short "saving…" messages can flash up; only stop if the page really didn't move.
+    const movedAfterAll = await waitFor(() => moved(), { what: 'the next page', timeoutMs: 4_000 }).catch(() => false);
+    if (movedAfterAll) return { moved: true };
+  }
+  return { moved: false, errors: newErrors(), reason: outcome === 'timeout' ? 'The page did not change after clicking Next.' : 'Workday shows errors on this page.' };
 }

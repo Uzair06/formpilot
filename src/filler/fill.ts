@@ -78,7 +78,10 @@ function openList(trigger: Element): HTMLElement | null {
   const lists = deepQueryAll<HTMLElement>(document, '[role="listbox"], [data-automation-id*="popup" i], [data-automation-id*="dropdown" i]').filter(
     (list) => onScreen(list) && list.querySelector(OPTION_SELECTOR),
   );
-  return lists.at(-1) ?? null;
+  if (lists.length > 0) return lists.at(-1)!;
+  // Last resort: options are on screen but their container isn't marked as a list.
+  const looseOption = deepQueryAll<HTMLElement>(document, OPTION_SELECTOR).find((o) => onScreen(o) && cleanText(o.textContent));
+  return looseOption?.parentElement ?? null;
 }
 
 const optionElements = (list: Element) =>
@@ -107,13 +110,64 @@ const shownValue = (trigger: Element) => cleanText(trigger.tagName === 'INPUT' ?
 
 const optionText = (option: Element) => cleanText(option.getAttribute('aria-label') ?? option.textContent);
 
+/** The element that scrolls a list: the list itself, something inside it, or a box around it. */
+function scrollerOf(list: HTMLElement): HTMLElement | null {
+  const scrolls = (el: HTMLElement) => el.scrollHeight > el.clientHeight + 4 && /auto|scroll/.test(getComputedStyle(el).overflowY);
+  if (scrolls(list)) return list;
+  const inside = [...list.querySelectorAll<HTMLElement>('*')].find(scrolls);
+  if (inside) return inside;
+  for (let el = list.parentElement; el && el !== document.body; el = el.parentElement) if (scrolls(el)) return el;
+  return null;
+}
+
+/**
+ * Finds the option matching `wanted`. Long Workday lists only draw the options in view,
+ * so this scrolls down step by step until the option appears or the list ends.
+ */
+async function findOption(list: HTMLElement, wanted: string): Promise<{ option: HTMLElement | null; seen: string[] }> {
+  const seen = new Set<string>();
+  for (let step = 0; step < 60; step++) {
+    const options = optionElements(list);
+    options.forEach((o) => seen.add(optionText(o)));
+    const match = matchOption(wanted, options.map(optionText));
+    const option = options.find((o) => optionText(o) === match);
+    if (option) return { option, seen: [...seen] };
+
+    const scroller = scrollerOf(list);
+    if (!scroller) break;
+    const before = scroller.scrollTop;
+    scroller.scrollTop = before + Math.max(scroller.clientHeight * 0.8, 80);
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
+    if (scroller.scrollTop === before) break; // reached the end
+    await waitForQuiet({ quietMs: 150, timeoutMs: 1_500 });
+  }
+  // Nothing matched while scrolling: pick from everything we saw (there could be one fuzzy match).
+  return { option: null, seen: [...seen] };
+}
+
+/** All option texts in a list, scrolling through long lists (capped). */
+async function readAllOptions(list: HTMLElement): Promise<string[]> {
+  const seen = new Set<string>();
+  for (let step = 0; step < 40 && seen.size < 400; step++) {
+    optionElements(list).forEach((o) => seen.add(optionText(o)));
+    const scroller = scrollerOf(list);
+    if (!scroller) break;
+    const before = scroller.scrollTop;
+    scroller.scrollTop = before + Math.max(scroller.clientHeight * 0.8, 80);
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
+    if (scroller.scrollTop === before) break;
+    await waitForQuiet({ quietMs: 150, timeoutMs: 1_500 });
+  }
+  return [...seen];
+}
+
 /** Opens a Workday drop-down, reads its choices, and closes it again. Used by the Mapper. */
 export async function readDropdownOptions(field: FieldDescriptor): Promise<string[]> {
   const element = elementFor(field);
   if (!element || field.type !== 'select') return field.options;
   if (element.tagName === 'SELECT') return field.options;
   const list = await openDropdown(element);
-  const options = list ? optionElements(list).map(optionText) : [];
+  const options = list ? await readAllOptions(list) : [];
   pressKey(list ?? element, 'Escape');
   await waitFor(() => !openList(element), { what: 'the list to close', timeoutMs: 1_500 }).catch(() => realClick(element));
   return options;
@@ -123,60 +177,110 @@ async function fillDropdown(button: HTMLElement, value: string): Promise<FillOut
   if (normalize(shownValue(button)) === normalize(value)) return { ok: true, value };
   const list = await openDropdown(button);
   if (!list) return fail('The drop-down list did not open.');
-  const options = optionElements(list);
-  const match = matchOption(value, options.map(optionText));
-  const option = options.find((o) => optionText(o) === match);
+  const { option, seen } = await findOption(list, value);
   if (!option) {
     pressKey(list, 'Escape');
-    return fail(`"${value}" is not one of the choices.`, options.map(optionText));
+    return fail(`"${value}" is not one of the choices.`, seen);
   }
+  const match = optionText(option);
   realClick(option);
-  const shown = await waitFor(() => normalize(shownValue(button)).includes(normalize(match!)), { what: 'the choice to show', timeoutMs: 3_000 }).catch(() => false);
-  if (!shown) {
+  const shows = () => normalize(shownValue(button)).includes(normalize(match));
+  if (!(await waitFor(shows, { what: 'the choice to show', timeoutMs: 3_000 }).catch(() => false))) {
     // Some lists pick on Enter rather than click.
     focus(option);
     pressKey(option, 'Enter');
-    const shownAfterKey = await waitFor(() => normalize(shownValue(button)).includes(normalize(match!)), { what: 'the choice to show', timeoutMs: 2_000 }).catch(() => false);
-    if (!shownAfterKey) return fail(`Picked "${match}" but the box still shows "${shownValue(button)}".`);
+    if (!(await waitFor(shows, { what: 'the choice to show', timeoutMs: 2_000 }).catch(() => false))) {
+      return fail(`Picked "${match}" but the box still shows "${shownValue(button)}".`);
+    }
   }
-  return { ok: true, value: match! };
+  return { ok: true, value: match };
 }
 
-// --- search-as-you-type ("prompt") boxes ---
+// --- search-as-you-type ("prompt") boxes, e.g. Skills, Field of Study, How Did You Hear ---
 
-const chipsNear = (input: Element) => {
-  const container = input.closest('[data-automation-id^="formField"]') ?? input.parentElement?.parentElement ?? input;
-  return [...container.querySelectorAll('[data-automation-id="selectedItem"], [role="listitem"]')].map((chip) => cleanText(chip.textContent));
-};
+/** The question's box around a search input. */
+const promptBox = (input: Element) =>
+  input.closest('[data-automation-id^="formField"]') ?? input.parentElement?.parentElement?.parentElement ?? input;
+
+/** Picked items ("chips") shown in the question's box. */
+const chipsNear = (input: Element) =>
+  [...promptBox(input).querySelectorAll('[data-automation-id="selectedItem"], [data-automation-id*="selectedItem" i], [role="listitem"]')].map((chip) =>
+    cleanText(chip.textContent),
+  );
+
+/** Workday's own counter, e.g. "2 items selected" (null if the page doesn't show one). */
+function selectedCount(input: Element): number | null {
+  const match = cleanText(promptBox(input).textContent).match(/(\d+)\s+items?\s+selected/i);
+  return match ? Number(match[1]) : null;
+}
+
+/** Puts search text into the box the way typing does, without leaving the box. */
+function typeSearch(input: HTMLInputElement, text: string): void {
+  focus(input);
+  input.select?.();
+  const inserted = document.execCommand?.('insertText', false, text);
+  if (!inserted || input.value !== text) setNativeValue(input, text);
+}
 
 async function fillPrompt(input: HTMLInputElement, value: string): Promise<FillOutcome> {
-  const hasChip = () => chipsNear(input).some((chip) => normalize(chip).includes(normalize(value)) || normalize(value).includes(normalize(chip)));
-  if (hasChip()) return { ok: true, value };
+  const same = (a: string, b: string) => normalize(a).includes(normalize(b)) || normalize(b).includes(normalize(a));
+  if (chipsNear(input).some((chip) => same(chip, value))) return { ok: true, value };
 
-  focus(input);
-  realClick(input);
-  setNativeValue(input, value);
-  pressKey(input, 'Enter');
+  const countBefore = selectedCount(input);
+  const chipsBefore = chipsNear(input).length;
+  const picked = (match: string) =>
+    chipsNear(input).some((chip) => same(chip, match)) ||
+    chipsNear(input).length > chipsBefore ||
+    (countBefore !== null && (selectedCount(input) ?? 0) > countBefore);
 
-  // Some lists are nested (a category, then its items): pick the best match up to 3 levels deep.
-  let lastOptions: string[] = [];
-  for (let level = 0; level < 3; level++) {
-    const list = await waitFor(() => openList(input), { what: 'search results' }).catch(() => null);
-    if (!list) break;
-    const options = optionElements(list);
-    lastOptions = options.map(optionText);
-    // A single search result is taken only if it is clearly the same thing (e.g. "LinkedIn" → "LinkedIn Job Posting").
-    const only = options.length === 1 ? lastOptions[0]! : null;
-    const match = matchOption(value, lastOptions) ?? (only && (normalize(only).includes(normalize(value)) || normalize(value).includes(normalize(only))) ? only : null);
-    const option = options.find((o) => optionText(o) === match);
-    if (!option) break;
-    realClick(option);
-    await waitForQuiet({ quietMs: 250, timeoutMs: 3_000 });
-    const chips = chipsNear(input);
-    if (chips.length > 0 && (hasChip() || chips.some((chip) => normalize(chip) === normalize(match!)))) return { ok: true, value: match! };
+  // Two ways in: search by typing (suggestions appear as you type, or after Enter),
+  // then, if that finds nothing, the full list (some questions are "scroll and pick").
+  const searches: Array<() => Promise<HTMLElement | null>> = [
+    async () => {
+      realClick(input);
+      typeSearch(input, value);
+      return (
+        (await waitFor(() => openList(input), { what: 'suggestions', timeoutMs: 2_500 }).catch(() => null)) ??
+        (pressKey(input, 'Enter'), await waitFor(() => openList(input), { what: 'search results', timeoutMs: 4_000 }).catch(() => null))
+      );
+    },
+    async () => {
+      pressKey(input, 'Escape');
+      typeSearch(input, '');
+      return openDropdown(input);
+    },
+  ];
+
+  let seen: string[] = [];
+  for (const search of searches) {
+    let list = await search();
+    // Lists can be nested (a category, then its items): follow up to 3 levels.
+    for (let level = 0; list && level < 3; level++) {
+      const found = await findOption(list, value);
+      seen = found.seen;
+      let option = found.option;
+      // A single result is taken only if it is clearly the same thing ("LinkedIn" → "LinkedIn Job Posting").
+      const only = optionElements(list);
+      if (!option && only.length === 1 && same(optionText(only[0]!), value)) option = only[0]!;
+      if (!option) break;
+
+      const match = optionText(option);
+      realClick(option);
+      const done = await waitFor(() => picked(match) || (openList(input) && openList(input) !== list ? 'next-level' : null), {
+        what: 'the pick to show',
+        timeoutMs: 3_000,
+      }).catch(() => null);
+      if (picked(match)) {
+        pressKey(input, 'Escape'); // close the list so the next search starts clean
+        await waitForQuiet({ quietMs: 200, timeoutMs: 2_000 });
+        return { ok: true, value: match };
+      }
+      list = done === 'next-level' ? openList(input) : null;
+    }
   }
   pressKey(input, 'Escape');
-  return fail(`Could not find "${value}" in the search results.`, lastOptions);
+  typeSearch(input, '');
+  return fail(`Could not find "${value}" in the list.`, seen.slice(0, 20));
 }
 
 // --- radio buttons and checkboxes ---
