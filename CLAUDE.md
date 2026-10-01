@@ -218,8 +218,9 @@ If time gets short: protect the full end-to-end flow + review/confirm + EEO rule
 - [x] **Phase B** — Filler: text, native/Workday drop-downs, search boxes (nested), radio, checkbox, split dates, file upload
 - [x] **Phase C** — Mapper: label rules → one Gemini call per page → policy (prefilled kept, EEO only from Answers, consent flagged, sensitive never answered, options must be real, confidence tiers)
 - [x] **Phase D** — Orchestrator/Navigator: Fill this page / Fill all pages, Add entries for jobs/schools, pause at sign-in, stop at errors or Review, live progress in the side panel
-- [x] **Phase E (part)** — Review list + two-step "Confirm and submit" (submit only on the user's click)
-- [ ] **Next:** tune against real NVIDIA pages (user's snapshots), then docs (SETUP, ARCHITECTURE, AI_STRATEGY, LIMITATIONS), zip, demo video
+- [x] **Phase E** — Review list + two-step "Confirm and submit"; auto-start (Apply → Apply Manually); resume run after full page loads; wait at sign-in then continue; "Use" for AI suggestions
+- [x] Docs: README, SETUP, ARCHITECTURE, AI_STRATEGY, LIMITATIONS, DEMO; release zip `npm run zip` (v1.0.0)
+- [ ] **Next (needs the user):** live run on NVIDIA after sign-in → fix what breaks on real pages; record demo video
 - `npm run test:e2e` runs the full flow on a fake Workday page (`tests/e2e/fake-workday.html`) in Chromium
 - [x] **M1 — resume upload and parsing**
   - [x] Step 1: side panel, options page (Gemini API key), Vitest setup

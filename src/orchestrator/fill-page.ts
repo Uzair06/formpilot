@@ -2,7 +2,7 @@ import { elementFor, fillField, readDropdownOptions, type FillOutcome } from '@/
 import { realClick } from '@/src/filler/events';
 import { mapFields } from '@/src/mapper/map';
 import { sendToBackground } from '@/src/messaging/messages';
-import { detectPageKind, goToNextPage, visibleErrors } from '@/src/navigator/page';
+import { detectPageKind, findNextButton, findStartButton, goToNextPage, visibleErrors } from '@/src/navigator/page';
 import { loadAnswersProfile, loadResumeProfile } from '@/src/profile/storage';
 import { cleanText, deepQueryAll, isVisible } from '@/src/scanner/dom';
 import { scanPage } from '@/src/scanner/scan';
@@ -126,18 +126,54 @@ function addButtonAfter(heading: Element, allHeadings: Element[]): HTMLElement |
   return buttons.at(-1) ?? null;
 }
 
+/** Waits until a freshly loaded Workday page has drawn its content (it renders after load). */
+async function pageReady(): Promise<void> {
+  await waitFor(() => detectPageKind() !== 'form' || scanPage().length > 0 || findNextButton(), { what: 'the page to load', timeoutMs: 20_000 }).catch(() => null);
+  await waitForQuiet({ quietMs: 500, timeoutMs: 5_000 });
+}
+
+const RESUME_WINDOW_MS = 10 * 60_000;
+
+/**
+ * Called when the content script starts on a new page. Some Workday steps (e.g. "Apply Manually",
+ * signing in) do a full page load, which ends the old script; if a run was active, continue it here.
+ */
+export async function resumeRunAfterLoad(): Promise<boolean> {
+  const state = await runState.getValue();
+  const active = (state.status === 'running' || state.status === 'awaiting_auth') && !state.stopRequested;
+  if (!active || Date.now() - state.updatedAt > RESUME_WINDOW_MS) return false;
+  await pageReady();
+  await runAllPages({ resumed: true });
+  return true;
+}
+
 /** Fills page after page until sign-in, a problem, or the Review page. Never submits. */
-export async function runAllPages(): Promise<void> {
-  await updateRun({ status: 'running', message: 'Starting…', stopRequested: false });
+export async function runAllPages({ resumed = false } = {}): Promise<void> {
+  await updateRun({ status: 'running', message: resumed ? 'Continuing on the new page…' : 'Starting…', ...(resumed ? {} : { stopRequested: false }) });
   for (let i = 0; i < MAX_PAGES; i++) {
     if ((await runState.getValue()).stopRequested) {
       await updateRun({ status: 'stopped', message: 'Stopped. Press "Fill all pages" to continue.' });
       return;
     }
     const kind = detectPageKind();
+    if (kind === 'job') {
+      // Job posting → Apply → Apply Manually. These open the application; no sign-in is touched.
+      const start = findStartButton()!;
+      await updateRun({ message: `Clicking "${cleanText(start.textContent)}"…` });
+      realClick(start);
+      await waitFor(() => findStartButton() !== start || detectPageKind() !== 'job', { what: 'the application to open', timeoutMs: 15_000 }).catch(() => null);
+      await waitForQuiet({ quietMs: 500, timeoutMs: 10_000 });
+      continue;
+    }
     if (kind === 'signin') {
-      await updateRun({ status: 'awaiting_auth', message: 'Please sign in or create your account on the page, then press "Fill all pages" again.' });
-      return;
+      // Hard Rule 2: never touch sign-in. Wait for the user; continue once the page is past it.
+      // (If signing in reloads the page, resumeRunAfterLoad picks the run up instead.)
+      await updateRun({ status: 'awaiting_auth', message: 'Please sign in or create your account on the page. FormPilot will continue by itself afterwards.' });
+      const signedIn = await waitFor(() => detectPageKind() !== 'signin', { what: 'sign-in', timeoutMs: 15 * 60_000 }).catch(() => false);
+      if (!signedIn) return;
+      await updateRun({ status: 'running', message: 'Signed in. Continuing…' });
+      await pageReady();
+      continue;
     }
     if (kind === 'review') {
       await updateRun({ status: 'review', message: 'Reached the Review page. Check everything below, then confirm to submit.' });
@@ -169,6 +205,24 @@ export async function runAllPages(): Promise<void> {
     await waitForQuiet({ quietMs: 500, timeoutMs: 10_000 });
   }
   await updateRun({ status: 'needs_user', message: 'Stopped after many pages without reaching Review.' });
+}
+
+/** Fills one field with a value the user accepted in the side panel, and updates the report. */
+export async function useSuggestion(fieldId: string, value: string): Promise<{ filled: boolean; note: string }> {
+  const field = scanPage().find((f) => f.id === fieldId);
+  if (!field) return { filled: false, note: 'That field is no longer on this page.' };
+  const outcome = await fillField(field, value);
+  const state = await runState.getValue();
+  const pages = state.pages.map((p) => ({
+    ...p,
+    fields: p.fields.map((f) =>
+      f.fieldId === fieldId
+        ? { ...f, status: 'fill' as const, source: 'user' as const, outcome: outcome.ok ? ('filled' as const) : ('failed' as const), shownValue: outcome.ok ? outcome.value : undefined, outcomeNote: outcome.ok ? undefined : outcome.reason }
+        : f,
+    ),
+  }));
+  await updateRun({ pages });
+  return outcome.ok ? { filled: true, note: '' } : { filled: false, note: outcome.reason };
 }
 
 /** Clicks Submit. Only ever called after the user presses "Confirm and submit" in the side panel (Hard Rule 1). */

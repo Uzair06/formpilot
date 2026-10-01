@@ -5,7 +5,8 @@ import { realClick } from '@/src/filler/events';
 
 // Knows where we are in the Workday flow and how to move forward.
 
-export type PageKind = 'signin' | 'form' | 'review' | 'done';
+// job = the job posting (Apply button) or the "how do you want to apply" choice.
+export type PageKind = 'job' | 'signin' | 'form' | 'review' | 'done';
 
 const visibleButtons = () =>
   deepQueryAll<HTMLElement>(document, 'button, [role="button"], a[data-automation-id]').filter((b) => isVisible(b));
@@ -15,7 +16,7 @@ export function detectPageKind(): PageKind {
   const { title } = pageInfo();
   // innerText = only what a person can see (textContent would include script code).
   const body = cleanText(document.body.innerText ?? document.body.textContent).toLowerCase();
-  if (/application (has been )?(submitted|received)|thank you for applying|successfully submitted/.test(body)) return 'done';
+  if (/application (has been )?(submitted|received)|thank you for applying|successfully submitted|congratulations.{0,40}appl/.test(body)) return 'done';
 
   const automationIds = visibleButtons().map((b) => b.getAttribute('data-automation-id') ?? '');
   const hasPassword = deepQueryAll(document, 'input[type="password"]').some((el) => isVisible(el));
@@ -23,7 +24,18 @@ export function detectPageKind(): PageKind {
     return 'signin';
   }
   if (/review/i.test(title) || visibleButtons().some((b) => /^submit( application)?$/i.test(buttonText(b)))) return 'review';
+  if (findStartButton()) return 'job';
   return 'form';
+}
+
+/** On a job posting: "Apply". On the apply-choice dialog: "Apply Manually" (we fill from the profile ourselves). */
+export function findStartButton(): HTMLElement | null {
+  const buttons = visibleButtons();
+  return (
+    buttons.find((b) => /applyManually/i.test(b.getAttribute('data-automation-id') ?? '') || /^apply manually$/i.test(buttonText(b))) ??
+    buttons.find((b) => /adventureButton/i.test(b.getAttribute('data-automation-id') ?? '') || /^apply( now)?$/i.test(buttonText(b))) ??
+    null
+  );
 }
 
 export function findNextButton(): HTMLElement | null {

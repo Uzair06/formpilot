@@ -52,7 +52,20 @@ export default function AutofillPanel() {
     setBusy(type === 'fillPage');
     const result = await sendToActiveTab({ type });
     setBusy(false);
+    if (!result.ok) return setNotice(result.error.message);
+    if (type === 'fillPage') {
+      const kind = (result.data as { kind?: string }).kind;
+      if (kind === 'signin') setNotice('This is the sign-in page. Please sign in yourself first.');
+      if (kind === 'job') setNotice('This is the job posting. Press "Fill all pages" to start the application, or click Apply yourself.');
+      if (kind === 'review') setNotice('This is the Review page: nothing to fill. Use "Fill all pages" to get the confirm button.');
+    }
+  }
+
+  async function accept(f: FieldReport) {
+    if (typeof f.value !== 'string') return;
+    const result = await sendToActiveTab({ type: 'useSuggestion', fieldId: f.fieldId, value: f.value });
     if (!result.ok) setNotice(result.error.message);
+    else if (!result.data.filled) setNotice(result.data.note);
   }
 
   async function startOver() {
@@ -147,7 +160,14 @@ export default function AutofillPanel() {
                 {report.fields.map((f) => (
                   <li key={f.fieldId} className={`report-${rowKind(f)}`}>
                     <span className="report-label">{f.label || '(no label)'}</span>
-                    <span className="report-value">{describe(f)}</span>
+                    <span className="report-value">
+                      {describe(f)}
+                      {f.status === 'suggest' && !f.outcome && typeof f.value === 'string' && (
+                        <button type="button" className="link-button" onClick={() => accept(f)}>
+                          Use
+                        </button>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>

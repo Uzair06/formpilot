@@ -1,6 +1,6 @@
 // What the Mapper decides for each field.
 
-export type DecisionSource = 'rule' | 'answers' | 'ai' | 'prefilled' | 'policy';
+export type DecisionSource = 'rule' | 'answers' | 'ai' | 'prefilled' | 'policy' | 'user';
 
 export type DecisionStatus =
   | 'fill' // confident: fill it

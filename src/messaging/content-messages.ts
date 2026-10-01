@@ -12,6 +12,7 @@ export const ContentRequestSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('runAll') }), // fill page after page until Review (answers at once; progress goes to storage)
   z.object({ type: z.literal('stopRun') }),
   z.object({ type: z.literal('submitApplication') }), // only sent when the user clicks "Confirm and submit"
+  z.object({ type: z.literal('useSuggestion'), fieldId: z.string(), value: z.string() }), // user accepted an AI suggestion
 ]);
 
 export type ContentRequest = z.infer<typeof ContentRequestSchema>;
@@ -30,6 +31,7 @@ export interface ContentResponses {
   runAll: { started: true };
   stopRun: { stopping: true };
   submitApplication: { started: true };
+  useSuggestion: { filled: boolean; note: string };
 }
 
 export type ContentResponseFor<R extends ContentRequest> = Result<ContentResponses[R['type']]>;

@@ -41,3 +41,6 @@ One line per non-obvious decision.
 - 2026-10-01 — Page-kind detection reads `innerText` (visible text), not `textContent`, because script text on the page contains phrases like "Thank you for applying".
 - 2026-10-01 — Resume file reaches the content script as base64 via the background (`getResumeFile`), since the content script can't open the extension's IndexedDB.
 - 2026-10-01 — "Worked here before" is one company-neutral answer (was NVIDIA-specific).
+- 2026-10-01 — "Fill all pages" starts from the job posting (clicks Apply → Apply Manually). Those clicks cause a full page load on NVIDIA, so the new content script resumes any run active in the last 10 minutes. At sign-in it waits (up to 15 min) for the page to move on, then continues.
+- 2026-10-01 — Resume prompt now allows only certain inferences (e.g. country from US state, phone code from country), each with a warning, and normalizes formats (assignment asks to "infer missing or implicit information"). Contact details are still verified against the source.
+- 2026-10-01 — AI suggestions (confidence 0.5–0.75) get a one-click "Use" in the side panel.

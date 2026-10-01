@@ -1,6 +1,6 @@
 import { ContentRequestSchema, type ContentRequest } from '@/src/messaging/content-messages';
 import type { Result } from '@/src/messaging/messages';
-import { fillCurrentPage, runAllPages, submitApplication } from '@/src/orchestrator/fill-page';
+import { fillCurrentPage, resumeRunAfterLoad, runAllPages, submitApplication, useSuggestion } from '@/src/orchestrator/fill-page';
 import { updateRun } from '@/src/orchestrator/run-state';
 import { scanPage } from '@/src/scanner/scan';
 import { pageInfo, snapshotHtml } from '@/src/scanner/snapshot';
@@ -16,6 +16,12 @@ export default defineContentScript({
       handle(request.data).then(sendResponse);
       return true; // answer comes later
     });
+
+    // A run that was going on before this page loaded continues here.
+    running = true;
+    resumeRunAfterLoad()
+      .catch((error) => updateRun({ status: 'error', message: error instanceof Error ? error.message : 'Autofill failed.' }))
+      .finally(() => (running = false));
   },
 });
 
@@ -41,6 +47,8 @@ async function handle(request: ContentRequest): Promise<Result<unknown>> {
       case 'stopRun':
         await updateRun({ stopRequested: true });
         return { ok: true, data: { stopping: true } };
+      case 'useSuggestion':
+        return { ok: true, data: await useSuggestion(request.fieldId, request.value) };
       case 'submitApplication':
         void submitApplication().catch((error) => updateRun({ status: 'error', message: error instanceof Error ? error.message : 'Submit failed.' }));
         return { ok: true, data: { started: true } };
